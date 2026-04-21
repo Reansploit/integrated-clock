@@ -1,0 +1,126 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body, html, #root {
+  margin: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #020617;
+  color: #e2e8f0;
+}
+
+.layout-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+}
+
+.background-video, .fullscreen-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(6px);
+  background: linear-gradient(145deg, rgba(2, 6, 23, .72), rgba(15, 23, 42, .45));
+}
+
+.content-layer {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  padding: 2rem 3rem;
+}
+
+.typing-loop, .running-text {
+  white-space: nowrap;
+  overflow: hidden;
+  font-size: 1.15rem;
+  letter-spacing: .08em;
+}
+
+.running-text span {
+  display: inline-block;
+  padding-left: 100%;
+  animation: ticker 20s linear infinite;
+}
+
+.clock-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  text-align: center;
+}
+
+.analog-ring {
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  border: 3px solid rgba(56, 189, 248, .7);
+  box-shadow: 0 0 24px rgba(56, 189, 248, .35);
+}
+
+.digital-time {
+  font-family: Orbitron, sans-serif;
+  font-size: clamp(6rem, 12vw, 12rem);
+  line-height: 1;
+  margin: 0;
+  color: #93c5fd;
+  text-shadow: 0 0 18px rgba(125, 211, 252, .45);
+}
+
+.prayer-warning .digital-time {
+  color: #fbbf24;
+  animation: soft-pulse 1.6s ease-in-out infinite;
+}
+
+.mufrodat-card {
+  margin-top: 1rem;
+  min-width: min(70vw, 900px);
+  background: rgba(15, 23, 42, .4);
+  border: 1px solid rgba(148, 163, 184, .35);
+  border-radius: 18px;
+  padding: 1.25rem;
+}
+
+.arabic { font-size: 3.2rem; }
+.translation { font-size: 1.6rem; color: #cbd5e1; }
+.active-event { font-size: 1.4rem; }
+
+.layout-root.night .overlay {
+  background: rgba(0, 0, 0, .75);
+}
+
+.boot-screen, .system-message {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at top, #1e293b 10%, #020617 70%);
+}
+
+@keyframes ticker {
+  from { transform: translateX(0); }
+  to { transform: translateX(-100%); }
+}
+
+@keyframes soft-pulse {
+  0%, 100% { text-shadow: 0 0 14px rgba(251, 191, 36, .25); }
+  50% { text-shadow: 0 0 32px rgba(251, 191, 36, .9); }
+}
