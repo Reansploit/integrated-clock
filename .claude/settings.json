@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); cc=d['current_condition'][0]; na=d['nearest_area'][0]; print\\(f\\\\\"Lokasi: {na['areaName'][0]['value']}, {na['region'][0]['value']}\\\\\"\\); print\\(f\\\\\"Suhu: {cc['temp_C']}°C\\\\\"\\); print\\(f\\\\\"Kondisi: {cc['weatherDesc'][0]['value']}\\\\\"\\); print\\(f\\\\\"Kelembaban: {cc['humidity']}%\\\\\"\\)\")",
+      "Bash(curl -sL \"https://api.bmkg.go.id/prakiraan-cuaca?wilayah=JawaTimur\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\)\")",
+      "Bash(curl -sL \"https://api.bmkg.go.id/api/prakiraan-cuaca\")",
+      "Bash(node -e \"fetch\\('https://wttr.in/Jombang?format=j1'\\).then\\(r=>r.json\\(\\)\\).then\\(d=>{const c=d.current_condition[0],n=d.nearest_area[0];console.log\\('Lokasi:',n.areaName[0].value,',',n.region[0].value\\);console.log\\('Suhu:',c.temp_C,'°C'\\);console.log\\('Kondisi:',c.weatherDesc[0].value\\);console.log\\('Kelembaban:',c.humidity,'%'\\);console.log\\('Koordinat:',n.latitude,',',n.longitude\\)}\\)\")",
+      "Bash(curl -s \"https://api.openweathermap.org/data/2.5/weather?lat=-7.53&lon=112.24&appid=253c49d33d5d68e10af3e3e933d42088&units=metric\")",
+      "WebFetch(domain:home.openweathermap.org)",
+      "WebFetch(domain:openweathermap.org)",
+      "Bash(curl -s \"https://api.openweathermap.org/data/2.5/weather?lat=-7.53&lon=112.24&appid=9648e14092495942f30847c0b143e464&units=metric\")",
+      "Bash(curl -s \"https://wttr.in/Wonosalam?format=j1\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); c=d['current_condition'][0]; print\\({'temp':c['temp_C'],'humidity':c['humidity'],'desc':c['weatherDesc'][0]['value'],'icon':c['weatherIconUrl'][0]['value']}\\)\")",
+      "Bash(curl -s --max-time 10 \"https://wttr.in/Wonosalam?format=j1\")",
+      "Bash(curl -v --max-time 10 \"https://wttr.in\")",
+      "Bash(curl -s --max-time 10 \"https://api.open-meteo.com/v1/forecast?latitude=-7.53&longitude=112.24&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code\")",
+      "Bash(curl -s --max-time 10 \"https://geocoding-api.open-meteo.com/v1/search?name=Wonosalam&count=5&language=en&format=json\")",
+      "Bash(curl -s --max-time 10 \"https://geocoding-api.open-meteo.com/v1/search?name=Wonosalam%20Boarding%20School&count=5&language=en&format=json\")",
+      "Bash(curl -s --max-time 10 \"https://nominatim.openstreetmap.org/search?q=Wonosalam+Boarding+School+Jombang&format=json&limit=5\" -A \"ClaudeCode/1.0\")",
+      "Bash(curl -s --max-time 10 \"https://nominatim.openstreetmap.org/search?q=Pondok+Pesantren+Wonosalam+Jombang&format=json&limit=5\" -A \"ClaudeCode/1.0\")",
+      "Bash(curl -s --max-time 15 \"https://nominatim.openstreetmap.org/search?q=Wonosalam+Jombang&format=json&limit=5\" -A \"ClaudeCode/1.0\")",
+      "Bash(curl -s --max-time 15 \"https://nominatim.openstreetmap.org/search?q=boarding+school&near=Wonosalam+Jombang&format=json&limit=10\" -A \"ClaudeCode/1.0\")",
+      "Bash(curl -s --max-time 15 \"https://nominatim.openstreetmap.org/search?q=pesantren+Wonosalam+Jombang&format=json&limit=10\" -A \"ClaudeCode/1.0\")",
+      "Bash(curl -s --max-time 15 \"https://overpass-api.de/api/interpreter\" -d \"[out:json];\\(node[\\\\\"amenity\\\\\"=\\\\\"school\\\\\"]\\(around:2000,-7.7089,112.3709\\);way[\\\\\"amenity\\\\\"=\\\\\"school\\\\\"]\\(around:2000,-7.7089,112.3709\\);node[\\\\\"name\\\\\"~\\\\\"Wonosalam\\\\\"]\\(around:5000,-7.7089,112.3709\\);way[\\\\\"name\\\\\"~\\\\\"Wonosalam\\\\\"]\\(around:5000,-7.7089,112.3709\\);\\);out center 10;\")",
+      "Bash(curl -s --max-time 15 -H \"Content-Type: application/x-www-form-urlencoded\" -d 'data=[out:json];\\(node[\"amenity\"=\"school\"]\\(around:2000,-7.7089,112.3709\\);way[\"amenity\"=\"school\"]\\(around:2000,-7.7089,112.3709\\);node[\"name\"~\"Wonosalam\"]\\(around:5000,-7.7089,112.3709\\);way[\"name\"~\"Wonosalam\"]\\(around:5000,-7.7089,112.3709\\);\\);out center 10;' \"https://overpass-api.de/api/interpreter\")",
+      "Bash(curl -s \"https://api.open-meteo.com/v1/forecast?latitude=-7.7089&longitude=112.3709&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code\")",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:3001)",
+      "Bash(taskkill /PID 7576 /F)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(curl -s http://localhost:3000)",
+      "PowerShell(Get-Process -Name \"node\" | Where-Object { $_.CommandLine -match \"npm run dev|next dev\" } 2>$null | ForEach-Object { Write-Output \"PID: $\\($_.Id\\) - $\\($_.CommandLine\\)\" })",
+      "PowerShell(Get-Process -Name \"node\" -ErrorAction SilentlyContinue | Select-Object Id, @{N='CommandLine';E={$_.CommandLine}} | Format-Table -AutoSize)",
+      "PowerShell(netstat -ano | Select-String \":3000\" | ForEach-Object { $parts = $_ -split '\\\\s+'; $pid = $parts[-1]; if \\($pid -match '^\\\\d+$'\\) { Write-Output \"Port 3000 PID: $pid\"; Get-Process -Id $pid -ErrorAction SilentlyContinue | Select-Object Id, ProcessName } })",
+      "PowerShell(Get-Process -Name \"node\" -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-CimInstance Win32_Process -Filter \"Name = 'node.exe'\")",
+      "PowerShell(Stop-Process -Id 14652, 19112, 988 -Force)",
+      "Bash(taskkill /PID 8044 /F)",
+      "PowerShell(Stop-Process -Id 8044 -Force)"
+    ]
+  }
+}

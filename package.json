@@ -1,0 +1,34 @@
+{
+  "name": "clock2",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "next dev --webpack --hostname 0.0.0.0",
+    "dev:turbo": "next dev --turbopack --hostname 0.0.0.0",
+    "build": "next build",
+    "start": "next start --hostname 0.0.0.0",
+    "lint": "next lint",
+    "db:init": "tsx scripts/seed-db.ts",
+    "db:seed": "tsx scripts/seed-db.ts",
+    "db:merge": "tsx scripts/migrate-pg-to-sqlite.ts"
+  },
+  "dependencies": {
+    "dotenv": "17.3.1",
+    "next": "16.2.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "three": "0.183.2",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "25.5.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@types/three": "0.183.1",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.2.1",
+    "postgres": "^3.4.9",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,29 @@
+# deps & build
+node_modules/
+.next/
+out/
+tsconfig.tsbuildinfo
+next-env.d.ts
+
+# env (jangan push secret)
+.env.local
+.env*.local
+
+# database lokal
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*.sqlite
+*.db-shm
+*.db-wal
+
+# python sisa
+.venv/
+__pycache__/
+la-server/.venv/
+
+# OS & editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

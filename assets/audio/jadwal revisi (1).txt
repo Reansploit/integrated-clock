@@ -1,0 +1,145 @@
+[senin]
+03:00-04:00 tahajjud
+04:00-05:00 shubuh
+05:00-05:59 Halaqoh
+06:00-07:14 Free Time
+07:14-08:59 KBM
+09:00-09:29 Break time
+09:30-10:59 KBM
+11:00-11:59 Qoilulah
+12:00-12:59 Break time
+13:00-14:29 KBM
+14:30-14:59 Free time
+15:00-15:30 Ashar
+15:31-16:59 Free time
+17:00-18:29 halaqoh
+18:30-19:00 Dinner
+19:01-19:30 isya'
+19:31-20:30 study/public speaking
+20:31-21:00 free time
+21:00-02:59 sleep
+
+[selasa]
+03:00-04:00 tahajjud
+04:01-04:59 shubuh
+05:00-06:00 Halaqoh
+06:00-07:15 Prepare
+07:15-07:30 Ceremony
+07:30-08:15 KBM 1
+08:15-09:00 KBM 2
+09:00-09:30 Qoilulah
+09:30-10:15 Break time
+10:15-11:00 KBM
+11:00-11:55 Free time
+11:55-12:30 Ashar
+12:30-13:00 Free time
+13:00-13:45 halaqoh
+13:45-14:30 Dinner
+14:30-15:00 isya'
+15:00-15:30 study/public speaking
+15:30-16:30 free time
+16:30-16:45 sleep
+16:45-17:00 Prepare
+17:00-18:30 
+
+[rabu]
+03:00-04:00 tahajjud
+04:01-04:59 shubuh
+05:00-05:59 Halaqoh
+06:00-07:14 Free Time
+07:14-08:59 KBM
+09:00-09:29 Break time
+09:30-10:59 KBM
+11:00-11:59 Qoilulah
+12:00-12:59 Break time
+13:00-14:29 KBM
+14:30-14:59 Free time
+15:00-15:30 Ashar
+15:31-16:59 Free time
+17:00-18:29 halaqoh
+18:30-19:00 Dinner
+19:01-19:30 isya'
+19:31-20:30 study/public speaking
+20:31-21:00 free time
+21:00-02:59 sleep
+
+[kamis]
+03:00-04:00 tahajjud
+04:01-04:59 shubuh
+05:00-05:59 Halaqoh
+06:00-07:14 Free Time
+07:14-08:59 KBM
+09:00-09:29 Break time
+09:30-10:59 KBM
+11:00-11:59 Qoilulah
+12:00-12:59 Break time
+13:00-14:29 KBM
+14:30-14:59 Free time
+15:00-15:30 Ashar
+15:31-16:59 Free time
+17:00-18:29 halaqoh
+18:30-19:00 Dinner
+19:01-19:30 isya'
+19:31-20:30 study/public speaking
+20:31-21:00 free time
+21:00-02:59 sleep
+
+[jum'at]
+03:00-04:00 tahajjud
+04:01-04:59 shubuh
+05:00-05:59 Al-kahfi + kajian
+06:00-07:00 Run
+07:01-09:59 Free time
+10:00-11:00 Qoilulah
+11:01-12:30 Jum'at pray
+12:31-14:59 free time
+15:00-15:30 Ashar
+15:31-16:59 Free time
+17:00-18:29 halaqoh
+18:30-19:00 Dinner
+19:01-19:30 isya'
+19:31-20:30 study/public speaking
+20:31-21:00 free time
+21:00-02:59 sleep
+
+[sabtu]
+03:00-04:00 tahajjud
+04:01-04:59 shubuh
+05:00-05:59 Halaqoh
+06:00-07:14 Free Time
+07:14-08:59 KBM
+09:00-09:29 Break time
+09:30-10:59 KBM
+11:00-11:59 Qoilulah
+12:00-12:59 Break time
+13:00-14:29 KBM
+14:30-14:59 Free time
+15:00-15:30 Ashar
+15:31-16:59 Free time
+17:00-18:29 halaqoh
+18:30-19:00 Dinner
+19:01-19:30 isya'
+19:31-20:30 study/public speaking
+20:31-21:00 free time
+21:00-02:59 sleep
+
+[minggu]
+03:00-04:00 tahajjud
+04:01-04:59 shubuh
+05:00-05:59 Halaqoh
+06:00-07:14 Free Time
+07:14-08:59 KBM
+09:00-09:29 Break time
+09:30-10:59 KBM
+11:00-11:59 Qoilulah
+12:00-12:59 Break time
+13:00-14:29 KBM
+14:30-14:59 Free time
+15:00-15:30 Ashar
+15:31-16:59 Free time
+17:00-18:29 halaqoh
+18:30-19:00 Dinner
+19:01-19:30 isya'
+19:31-20:30 study/public speaking
+20:31-21:00 free time
+21:00-02:59 sleep

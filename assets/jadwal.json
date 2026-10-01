@@ -1,0 +1,22 @@
+[
+  {
+    "title": "Morning Study",
+    "day": "senin",
+    "start": "05:15",
+    "end": "06:00",
+    "note": "Routine Monday session"
+  },
+  {
+    "title": "Youth Tahsin",
+    "day": "rabu",
+    "start": "19:30",
+    "end": "20:45",
+    "note": "Main hall"
+  },
+  {
+    "title": "Friday Charity",
+    "day": "jumat",
+    "start": "13:00",
+    "end": "14:00"
+  }
+]
