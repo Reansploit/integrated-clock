@@ -725,18 +725,18 @@ select {
 }
 
 .week-flag__flag {
-  height: 3.5rem;
-  border-radius: 6px;
+  height: 5rem;
+  border-radius: 8px;
 }
 
 .week-flag__caption {
   color: var(--muted);
-  font-size: 1.05rem;
+  font-size: 1.3rem;
 }
 
 .week-flag__caption[lang='ar'] {
   font-family: var(--font-noto-sans-arabic), sans-serif;
-  font-size: 1.25rem;
+  font-size: 1.6rem;
 }
 
 .translation-line {
