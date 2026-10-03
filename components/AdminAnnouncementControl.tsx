@@ -1,7 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
-
+import { getAnnouncementApiBase } from '@/lib/announcement/apiBase';
 import { getAnnouncementRtcDiagnostics } from '@/lib/announcement/rtcConfig';
 import { usePushToTalkAnnouncement } from '@/lib/announcement/usePushToTalkAnnouncement';
 
@@ -9,40 +8,40 @@ type AdminAnnouncementControlProps = {
   authToken?: string;
 };
 
+/**
+ * Both setup notes below are about one situation only: the board lives on a
+ * different machine, so the signaling server sits on another origin. On one LAN
+ * with the panel next to the board there is nothing to configure, and showing
+ * the note anyway would just be noise to read past.
+ */
 export function AdminAnnouncementControl({ authToken = '' }: AdminAnnouncementControlProps) {
-  const adminToken = useMemo(() => authToken, [authToken]);
-  const rtcDiagnostics = useMemo(() => getAnnouncementRtcDiagnostics(), []);
-
-  const state = usePushToTalkAnnouncement({
-    authToken: adminToken,
-  });
+  const rtcDiagnostics = getAnnouncementRtcDiagnostics();
+  const isCrossOrigin = getAnnouncementApiBase() !== '';
+  const state = usePushToTalkAnnouncement({ authToken });
 
   return (
-    <div className={`announcement-admin ${state.isActive ? 'is-live' : ''}`}>
-      <div className="announcement-admin__status-row">
-        <strong>{state.isActive ? 'LIVE ANNOUNCEMENT' : 'Push-to-Talk standby'}</strong>
-        <span>{state.isConnected ? 'Live signaling connected' : 'Live signaling disconnected'}</span>
+    <div className="ptt" data-live={state.isActive ? 'true' : undefined}>
+      <div className="ptt__state">
+        <span className="ptt__label" data-live={state.isActive ? 'true' : undefined}>
+          {state.isActive ? 'Sedang bicara' : 'Siap dipakai'}
+        </span>
+        <span className="ptt__link">
+          {state.isConnected ? 'Sinyal tersambung' : 'Sinyal belum tersambung'}
+        </span>
       </div>
-      <p>Hold <kbd>SPACE</kbd> to talk. Release to stop.</p>
-      {state.isActive ? <p className="announcement-admin__live">🎤 LIVE ANNOUNCEMENT</p> : null}
-      {state.micDenied ? <p className="announcement-admin__error">Microphone permission denied.</p> : null}
-      {!state.micDenied && state.error ? <p className="announcement-admin__error">{state.error}</p> : null}
-      {!state.isConnected ? (
-        <p className="announcement-admin__hint">
-          Signaling belum tersambung. Pastikan endpoint live announcement bisa diakses, dan
-          <code>NEXT_PUBLIC_LA_BASE_URL</code> sudah diarahkan ke server signaling (jika pakai server terpisah).
-        </p>
-      ) : null}
-      {!rtcDiagnostics.hasTurn ? (
-        <p className="announcement-admin__hint">
-          TURN server belum dikonfigurasi. Untuk antar jaringan/internet (termasuk Tailscale Funnel), set
-          <code>NEXT_PUBLIC_ANNOUNCEMENT_ICE_SERVERS</code> dengan URL <code>turn:</code>/<code>turns:</code>.
-        </p>
-      ) : null}
-      {rtcDiagnostics.hasTurn && rtcDiagnostics.iceTransportPolicy !== 'relay' ? (
-        <p className="announcement-admin__hint">
-          TURN sudah ada. Jika audio masih putus antar jaringan, set
-          <code>NEXT_PUBLIC_ANNOUNCEMENT_ICE_TRANSPORT_POLICY=relay</code> untuk memaksa jalur TURN.
+
+      <p className="ptt__help">
+        Tahan tombol <kbd>Space</kbd> sambil bicara, lalu lepaskan untuk berhenti. Suara langsung keluar dari
+        speaker papan.
+      </p>
+
+      {state.micDenied ? <p className="ptt__error">Izin mikrofon ditolak browser.</p> : null}
+      {!state.micDenied && state.error ? <p className="ptt__error">{state.error}</p> : null}
+
+      {isCrossOrigin && !rtcDiagnostics.hasTurn ? (
+        <p className="ptt__note">
+          Kalau papan ada di jaringan yang berbeda, isi <code>NEXT_PUBLIC_ANNOUNCEMENT_ICE_SERVERS</code>{' '}
+          dengan alamat <code>turn:</code> atau <code>turns:</code>. Tanpa TURN, suara kadang tidak sampai.
         </p>
       ) : null}
     </div>

@@ -12,6 +12,7 @@ function getContentType(filePath: string) {
   if (ext === '.png') return 'image/png';
   if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
   if (ext === '.gif') return 'image/gif';
+  if (ext === '.webp') return 'image/webp';
   if (ext === '.mp4') return 'video/mp4';
   if (ext === '.webm') return 'video/webm';
   if (ext === '.mp3') return 'audio/mpeg';

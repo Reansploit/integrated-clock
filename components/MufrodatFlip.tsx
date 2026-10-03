@@ -20,7 +20,6 @@ function MufrodatCard({ item }: { item: MufrodatItem }) {
 export function MufrodatFlip({ items }: { items: MufrodatItem[] }) {
   const [index, setIndex] = useState(0);
   const [transitioning, setTransitioning] = useState(false);
-  const [settling, setSettling] = useState(false);
 
   useEffect(() => {
     if (items.length <= 1) {
@@ -44,20 +43,10 @@ export function MufrodatFlip({ items }: { items: MufrodatItem[] }) {
     };
   }, [items.length]);
 
-  useEffect(() => {
-    if (items.length <= 1) {
-      return;
-    }
-
-    setSettling(true);
-    const timeoutId = window.setTimeout(() => setSettling(false), 420);
-    return () => window.clearTimeout(timeoutId);
-  }, [index, items.length]);
-
   const currentItem = items[index];
 
   if (!currentItem) {
-    return <p className="fallback-note">No vocabulary items to display yet.</p>;
+    return <p className="fallback-note">No vocabulary to display.</p>;
   }
 
   if (items.length <= 1) {
@@ -65,7 +54,7 @@ export function MufrodatFlip({ items }: { items: MufrodatItem[] }) {
   }
 
   return (
-    <div className={`mufrodat-flip ${transitioning ? 'is-flipping' : ''} ${settling ? 'is-settling' : ''}`}>
+    <div className={`mufrodat-flip ${transitioning ? 'is-flipping' : ''}`}>
       <div className="mufrodat-flip__inner">
         <MufrodatCard item={currentItem} />
       </div>

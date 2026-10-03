@@ -71,14 +71,7 @@ export type VocabSlotRow = {
 export type DashboardSettings = {
   cityName: string;
   cityId: string;
-  theme: string;
-  runningText: string;
-  enableAdhan: boolean;
-  bootAnimationUrl: string;
-  introImageUrl: string;
   eventSoundUrl: string;
-  adhanSoundUrl: string;
-  sponsors: string;
   backgroundImageUrl: string;
   mufrodatVideoUrl: string;
   mufrodatVideoPlaybackNonce: string;
@@ -99,17 +92,7 @@ function plain<T extends object>(rows: T[]): T[] {
 const defaultSettings: SettingRow[] = [
   { key: 'cityName', value: 'Jombang' },
   { key: 'cityId', value: '1608' },
-  { key: 'theme', value: 'midnight' },
-  {
-    key: 'runningText',
-    value: 'Welcome to Wonosalam Boarding School • The future boarding school •',
-  },
-  { key: 'enableAdhan', value: 'true' },
-  { key: 'bootAnimationUrl', value: '' },
-  { key: 'introImageUrl', value: '' },
   { key: 'eventSoundUrl', value: '' },
-  { key: 'adhanSoundUrl', value: '' },
-  { key: 'sponsors', value: 'supported by | gra.png, developed by | stu.png' },
   { key: 'backgroundImageUrl', value: '' },
   { key: 'mufrodatVideoUrl', value: '' },
   { key: 'mufrodatVideoPlaybackNonce', value: '' },
@@ -122,35 +105,35 @@ const defaultSettings: SettingRow[] = [
 
 const defaultEvents = [
   {
-    title: 'Kajian Subuh',
+    title: 'Fajr Study Circle',
     day: 'senin',
     start: '05:15',
     endTime: '06:00',
-    note: 'Rutin setiap Senin pagi',
+    note: 'Every Monday morning',
     soundUrl: null,
   },
   {
-    title: 'Tahsin Remaja',
+    title: 'Youth Tajwid Class',
     day: 'rabu',
     start: '19:30',
     endTime: '20:45',
-    note: 'Ruang serbaguna',
+    note: 'Multipurpose hall',
     soundUrl: null,
   },
   {
-    title: 'Santunan Jumat Berkah',
+    title: 'Blessed Friday Charity',
     day: 'jumat',
     start: '13:00',
     endTime: '14:00',
-    note: 'Untuk jamaah sekitar masjid',
+    note: 'For the neighborhood congregation',
     soundUrl: null,
   },
 ];
 
 const defaultMufrodat = [
-  { arabic: 'صَلَاة', translation: 'Shalat / Prayer' },
-  { arabic: 'مَسْجِد', translation: 'Masjid / Mosque' },
-  { arabic: 'عِلْم', translation: 'Ilmu / Knowledge' },
+  { arabic: 'صَلَاة', translation: 'Prayer' },
+  { arabic: 'مَسْجِد', translation: 'Mosque' },
+  { arabic: 'عِلْم', translation: 'Knowledge' },
 ];
 
 const defaultTicker = [
@@ -177,8 +160,27 @@ export function getDbFilePath() {
   return path.join(process.cwd(), 'data', 'clock.db');
 }
 
-export function isDatabaseConfigured() {
-  return true;
+/**
+ * The file mtime, not a hardcoded "connected". SQLite runs in WAL mode, so a
+ * write lands in the `-wal` sibling first and the main file can lag behind by
+ * minutes; the newest of the two is the honest answer to "when did my save
+ * land".
+ */
+export function getDbWriteInfo() {
+  const filePath = getDbFilePath();
+  const candidates = [filePath, `${filePath}-wal`];
+  const times = candidates
+    .filter((candidate) => fs.existsSync(candidate))
+    .map((candidate) => fs.statSync(candidate).mtimeMs);
+
+  if (!times.length) {
+    return null;
+  }
+
+  return {
+    relativePath: path.relative(process.cwd(), filePath).split(path.sep).join('/'),
+    modifiedAt: new Date(Math.max(...times)).toISOString(),
+  };
 }
 
 export function getDb(): DatabaseSync {
@@ -315,9 +317,9 @@ function bootstrapDatabase() {
       'INSERT INTO vocab_items (english, arabic, meaning, example_ar, example_meaning, audio_url, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
     );
     const seedVocab = [
-      { english: 'Prayer', arabic: 'صَلَاة', meaning: 'Shalat', exampleAr: '', exampleMeaning: '' },
-      { english: 'Mosque', arabic: 'مَسْجِد', meaning: 'Masjid', exampleAr: '', exampleMeaning: '' },
-      { english: 'Knowledge', arabic: 'عِلْم', meaning: 'Ilmu', exampleAr: '', exampleMeaning: '' },
+      { english: 'Prayer', arabic: 'صَلَاة', meaning: 'Prayer', exampleAr: '', exampleMeaning: '' },
+      { english: 'Mosque', arabic: 'مَسْجِد', meaning: 'Mosque', exampleAr: '', exampleMeaning: '' },
+      { english: 'Knowledge', arabic: 'عِلْم', meaning: 'Knowledge', exampleAr: '', exampleMeaning: '' },
     ];
     seedVocab.forEach((row, index) => {
       insert.run(row.english, row.arabic, row.meaning, row.exampleAr, row.exampleMeaning, '', index + 1);
@@ -358,14 +360,7 @@ function getDefaultDashboardSettings(): DashboardSettings {
   return {
     cityName: 'Jombang',
     cityId: '1608',
-    theme: 'midnight',
-    runningText: getDefaultSettingValue('runningText'),
-    enableAdhan: true,
-    bootAnimationUrl: '',
-    introImageUrl: '',
     eventSoundUrl: '',
-    adhanSoundUrl: '',
-    sponsors: getDefaultSettingValue('sponsors'),
     backgroundImageUrl: '',
     mufrodatVideoUrl: '',
     mufrodatVideoPlaybackNonce: '',
@@ -385,14 +380,7 @@ export function getSettings(): DashboardSettings {
   return {
     cityName: map.get('cityName') || 'Jombang',
     cityId: map.get('cityId') || '1608',
-    theme: map.get('theme') || 'midnight',
-    runningText: map.get('runningText') || getDefaultSettingValue('runningText'),
-    enableAdhan: String(map.get('enableAdhan') || 'true').toLowerCase() === 'true',
-    bootAnimationUrl: map.get('bootAnimationUrl') || '',
-    introImageUrl: map.get('introImageUrl') || '',
     eventSoundUrl: map.get('eventSoundUrl') || '',
-    adhanSoundUrl: map.get('adhanSoundUrl') || '',
-    sponsors: map.get('sponsors') || getDefaultSettingValue('sponsors'),
     backgroundImageUrl: map.get('backgroundImageUrl') || '',
     mufrodatVideoUrl: map.get('mufrodatVideoUrl') || '',
     mufrodatVideoPlaybackNonce: map.get('mufrodatVideoPlaybackNonce') || '',

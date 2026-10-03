@@ -105,7 +105,12 @@ export function PrayerTimesPanel({ prayerTimes, initialNextPrayer }: PrayerTimes
   const { blinkingKey, overlayKey } = useMemo(() => getAdhanRuntimeState(prayerTimes, now), [now, prayerTimes]);
 
   if (!prayerTimes) {
-    return <p className="fallback-note">Prayer schedule could not be loaded.</p>;
+    return (
+      <div className="rail__fallback">
+        <strong>Prayer schedule unavailable.</strong>
+        <p>The schedule source is unreachable. The clock and events stay on; this list recovers on its own once data arrives.</p>
+      </div>
+    );
   }
 
   return (
@@ -133,9 +138,11 @@ export function PrayerTimesPanel({ prayerTimes, initialNextPrayer }: PrayerTimes
           ))}
       </ul>
 
-      <div className="next-prayer-card">
-        <span>Next Prayer</span>
-        <strong>{nextPrayer ? `${nextPrayer.label} - ${nextPrayer.time}` : 'Unavailable'}</strong>
+      <div className="next-prayer">
+        <span className="next-prayer__label">Next prayer</span>
+        <strong className="next-prayer__value">
+          {nextPrayer ? `${nextPrayer.label} ${nextPrayer.time}` : 'No data'}
+        </strong>
       </div>
 
       {overlayKey ? (

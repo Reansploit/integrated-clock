@@ -33,14 +33,19 @@ export function AnalogClock() {
   }, []);
 
   const { hourDeg, minuteDeg, secondDeg } = getTimeParts(now ?? new Date(0));
+  const ticks = Array.from({ length: 60 }, (_, tick) => tick);
 
   return (
     <div className="analog-clock" aria-label="Analog clock">
       <div className="analog-clock__face">
-        <div className="analog-clock__marker analog-clock__marker--12" />
-        <div className="analog-clock__marker analog-clock__marker--3" />
-        <div className="analog-clock__marker analog-clock__marker--6" />
-        <div className="analog-clock__marker analog-clock__marker--9" />
+        {ticks.map((tick) => (
+          <div
+            key={tick}
+            aria-hidden="true"
+            className={`analog-clock__tick${tick % 5 === 0 ? ' analog-clock__tick--major' : ''}`}
+            style={{ transform: `rotate(${tick * 6}deg)` }}
+          />
+        ))}
 
         <div className="analog-clock__hand analog-clock__hand--hour" style={{ transform: `rotate(${hourDeg}deg)` }} />
         <div className="analog-clock__hand analog-clock__hand--minute" style={{ transform: `rotate(${minuteDeg}deg)` }} />

@@ -2,15 +2,19 @@
   --bg-0: #04070d;
   --bg-1: #08121d;
   --bg-2: #0d1d31;
-  --panel: rgba(10, 18, 32, 0.64);
-  --panel-strong: rgba(12, 22, 40, 0.82);
   --line: rgba(174, 208, 255, 0.18);
   --line-strong: rgba(174, 208, 255, 0.34);
   --text: #edf5ff;
   --muted: #a7bad4;
   --accent: #8dd7ff;
-  --accent-2: #ff9fcf;
+  /* One green for the whole highlight language. The left rail on an active row,
+     the countdown label, the next prayer label, and the row text all read this
+     single value. */
   --accent-3: #85efac;
+  /* The one background tint behind a highlighted row. This used to exist at
+     three different strengths (0.08, 0.12, 0.16) plus a partly green bottom
+     border, which made a single state read as four different colours. */
+  --wash-active: rgba(133, 239, 172, 0.12);
   --shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
   --font-space-grotesk: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, 'Noto Sans',
     'Liberation Sans', sans-serif;
@@ -21,6 +25,25 @@
   syntax: '<angle>';
   initial-value: 0deg;
   inherits: false;
+}
+
+/* Wall-board faces, shipped with the app in public/fonts so the board needs
+   no internet on the LAN. Xirana draws the Latin digits, Markazi Text the
+   Arabic-Indic ones. `swap` keeps the first paint from ever going blank. */
+@font-face {
+  font-family: 'Board Latin';
+  src: url('/fonts/xirana.regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Board Arabic';
+  src: url('/fonts/markazi-text.bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
 }
 
 * {
@@ -67,34 +90,54 @@ select {
   padding: clamp(18px, 1.4vw, 42px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  /* The single column has to be pinned. Left implicit, it sizes to max-content,
+     and the crawler's track is max-content wide, so the column grew to roughly
+     twice the screen and pushed the rail and the dates off the right edge. */
+  grid-template-columns: minmax(0, 1fr);
   gap: clamp(14px, 1vw, 22px);
   overflow: hidden;
   isolation: isolate;
   transition: background 1.5s ease;
 }
 
-.page-noise {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
-  background-size: 34px 34px;
-  mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
-  opacity: 0.4;
-  transition: opacity 1.5s ease;
+/* Board content stays above the wallpaper peek layer below. */
+.page-shell > header,
+.page-shell > .board,
+.page-shell > footer {
+  position: relative;
+  z-index: 1;
 }
 
-.boot-overlay {
+/* The wallpaper hides completely, then peeks through faded for five seconds
+   out of every twenty. At peak it is exactly the old permanent backdrop, so
+   text contrast never drops below what the gate already approved. */
+.wallpaper-peek {
   position: fixed;
   inset: 0;
-  z-index: 80;
-  display: grid;
-  place-items: center;
-  background: rgba(2, 5, 10, 0.94);
-  animation: bootFadeIn 220ms ease-out;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  animation: wallpaperPeek 20s ease-in-out infinite;
+}
+
+@keyframes wallpaperPeek {
+  0%,
+  70% {
+    opacity: 0;
+  }
+  75%,
+  95% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wallpaper-peek {
+    animation: none;
+  }
 }
 
 .mufrodat-video-overlay {
@@ -117,121 +160,34 @@ select {
   border-radius: 0;
 }
 
-.mufrodat-video-overlay__status {
-  position: absolute;
-  z-index: 2;
-  padding: 0.68rem 1.05rem;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.58);
-  border: 1px solid rgba(141, 215, 255, 0.34);
-  color: #d7efff;
-  font-size: 0.9rem;
-  letter-spacing: 0.02em;
-}
-
-html.video-overlay-active .page-noise {
-  opacity: 0.08;
-}
-
-html.video-overlay-active .ticker-track,
-html.video-overlay-active .time-row.is-adhan-active,
-html.video-overlay-active .mufrodat-flip.is-settling .mufrodat-flip__inner,
-html.video-overlay-active .adhan-overlay {
-  animation: none !important;
-}
-
-.boot-overlay__video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  background: #02050a;
-}
-
-.boot-overlay--intro {
-  background:
-    radial-gradient(circle at center, rgba(141, 215, 255, 0.16), transparent 32%),
-    rgba(2, 5, 10, 0.96);
-  animation: bootIntro 2.2s ease both;
-}
-
-.boot-intro-orb {
-  position: relative;
-  width: clamp(260px, 28vw, 380px);
-  aspect-ratio: 1;
-  display: grid;
-  place-items: center;
-  animation: bootIntroCard 2.2s ease both;
-}
-
-.boot-intro-orb__ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 3px solid rgba(109, 188, 255, 0.82);
-  box-shadow:
-    0 0 18px rgba(109, 188, 255, 0.34),
-    0 0 42px rgba(109, 188, 255, 0.2),
-    inset 0 0 14px rgba(109, 188, 255, 0.24);
-  animation:
-    bootRingSpin 8.5s linear infinite,
-    bootRingPulse 1.8s ease-in-out infinite;
-}
-
-.boot-intro-orb__inner {
-  width: 76%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  overflow: hidden;
-  display: grid;
-  place-items: center;
-  background: radial-gradient(circle at center, rgba(6, 13, 24, 0.95), rgba(2, 6, 12, 0.98));
-}
-
-.boot-intro-orb__image {
-  width: 86%;
-  height: 86%;
-  object-fit: contain;
-  filter:
-    drop-shadow(0 0 10px rgba(109, 188, 255, 0.25))
-    drop-shadow(0 0 20px rgba(109, 188, 255, 0.16));
-}
-
-.boot-intro-orb__fallback {
-  color: #9ed5ff;
-  font-size: clamp(1rem, 2.2vw, 1.5rem);
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-
-.glass-panel {
-  border: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(12, 21, 37, 0.72), rgba(9, 15, 27, 0.58));
-  backdrop-filter: blur(18px);
-  box-shadow: var(--shadow);
-  transition: border-color 400ms ease, box-shadow 500ms ease, background 500ms ease, opacity 1.5s ease, backdrop-filter 1.5s ease;
+/* Stop the crawl while a video is playing, so moving text does not compete with
+   it for attention. */
+html.video-overlay-active .ticker-track {
+  animation-play-state: paused;
 }
 
 .top-strip {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 14px;
-  border-radius: 20px;
-  padding: 12px 16px;
-  min-height: 54px;
+  padding: 4px 6px 12px;
+  border-bottom: 1px solid var(--line);
 }
 
-.top-strip__left,
-.top-strip__right {
+.top-strip__brand {
+  color: var(--text);
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.top-strip__dates {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: baseline;
+  gap: 12px;
   flex-wrap: wrap;
-}
-
-.date-lockup {
-  display: grid;
-  gap: 3px;
+  justify-content: flex-end;
 }
 
 .date-lockup__gregorian {
@@ -242,83 +198,83 @@ html.video-overlay-active .adhan-overlay {
 
 .date-lockup__hijri {
   color: var(--muted);
-  font-size: 0.78rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-size: 0.85rem;
 }
 
-.brand-lockup {
-  color: var(--accent);
-  font-size: 0.88rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  text-align: right;
-}
-
-.hero-panel {
+.board {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
-  gap: 18px;
-  align-items: stretch;
-  border-radius: 24px;
-  padding: 18px 20px;
+  grid-template-columns: minmax(0, 1.62fr) minmax(300px, 0.62fr);
+  gap: clamp(16px, 1.4vw, 30px);
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.hero-copy {
+.board__main {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: clamp(14px, 1.2vw, 24px);
+  min-height: 0;
+  min-width: 0;
+}
+
+.board__secondary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(12px, 1vw, 20px);
+  min-height: 0;
+  min-width: 0;
+}
+
+.mini-panel {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mini-panel__title {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.rail {
+  border-left: 1px solid var(--line);
+  padding-left: clamp(14px, 1.2vw, 24px);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
 }
 
-.eyebrow,
-.panel-kicker {
-  margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.26em;
-  font-size: 0.72rem;
-  color: var(--accent);
+.rail__title {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
 }
 
-.hero-panel h1,
-.panel-heading h2 {
-  margin: 0;
-  font-weight: 700;
-  letter-spacing: -0.04em;
+.rail__fallback {
+  display: grid;
+  gap: 8px;
+  align-content: start;
 }
 
-.hero-panel h1 {
-  max-width: 14ch;
-  font-size: clamp(1.65rem, 3.8vw, 3.1rem);
-  line-height: 0.94;
+.rail__fallback strong {
+  color: var(--text);
+  font-size: 1rem;
 }
 
-.hero-text {
-  max-width: 58ch;
+.rail__fallback p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.95rem;
-  line-height: 1.55;
-}
-
-.hero-metrics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.hero-metrics span,
-.panel-badge,
-.ticker-label {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(141, 215, 255, 0.22);
-  border-radius: 999px;
-  padding: 0.42rem 0.78rem;
-  background: rgba(141, 215, 255, 0.08);
-  color: var(--text);
-  font-size: 0.78rem;
+  line-height: 1.6;
+  font-size: 0.88rem;
 }
 
 .live-clock {
@@ -336,30 +292,77 @@ html.video-overlay-active .adhan-overlay {
 }
 
 .live-clock__time {
+  display: grid;
   max-width: 100%;
   white-space: nowrap;
-  display: flex;
-  align-items: baseline;
-  gap: 0.36em;
   font-variant-numeric: tabular-nums;
   line-height: 0.95;
 }
 
+/* Both scripts render stacked in one grid cell, so the container keeps the
+   wider layer's width and the switch never moves surrounding content. Only
+   opacity animates: the incoming script fades in over the outgoing one. */
+.live-clock__time-layer {
+  grid-area: 1 / 1;
+  display: flex;
+  align-items: baseline;
+  gap: 0.36em;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+.live-clock__time-layer--latin {
+  font-family: 'Board Latin', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.live-clock__time-layer--arabic {
+  font-family: 'Board Arabic', 'Noto Sans Arabic', sans-serif;
+}
+
+.live-clock__time:not(.live-clock__time--arabic) .live-clock__time-layer--latin,
+.live-clock__time--arabic .live-clock__time-layer--arabic {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-clock__time-layer {
+    transition: none;
+  }
+}
+
+/* The one focal point on the board. Latin minutes read Xirana, odd minutes
+   read Arabic-Indic digits in Markazi Text: the clock changes script every
+   minute and back again, crossfading on the stacked layers above. Light
+   weight at this size reads calmer than bold, which suits ENERGY 1. */
 .live-clock__time-main {
-  font-size: clamp(3rem, 5.6vw, 5.8rem);
-  font-weight: 780;
-  letter-spacing: 0.04em;
-  color: #edf5ff;
-  transition: color 350ms ease, text-shadow 450ms ease;
+  font-size: clamp(3.4rem, 8.4vw, 9rem);
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+/* Latin digits get breathing room. The Arabic layer keeps the base tracking:
+   letterspacing an Arabic-script run would pull its joins apart. */
+.live-clock__time-layer--latin .live-clock__time-main {
+  letter-spacing: 0.05em;
+}
+
+/* The heartbeat of the board: the colon breathes dim-bright once per second on
+   the same keyframes as the takeover clock. Ease, not steps: steps would read
+   as disappear-appear instead of dim-bright. */
+.live-clock__colon {
+  font-size: clamp(3.4rem, 8.4vw, 9rem);
+  font-weight: 300;
+  line-height: 0.95;
+  color: var(--accent);
+  animation: vocabBlink 1s ease-in-out infinite;
 }
 
 .live-clock__time-seconds {
-  font-size: 0.66em;
-  font-weight: 720;
-  letter-spacing: 0.06em;
-  color: rgba(237, 245, 255, 0.86);
-  opacity: 0.88;
-  transition: color 350ms ease;
+  font-size: 0.6em;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--accent);
 }
 
 .live-clock__date {
@@ -377,92 +380,37 @@ html.video-overlay-active .adhan-overlay {
   white-space: nowrap;
 }
 
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: minmax(420px, 1.55fr) minmax(210px, 0.55fr) minmax(210px, 0.7fr);
-  grid-template-rows: minmax(0, 0.74fr) minmax(0, 1.26fr);
-  gap: 14px;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.panel-surface {
-  border-radius: 22px;
-  padding: clamp(16px, 1vw, 26px);
-  min-height: 0;
-  overflow: hidden;
-}
-
-.clock-panel {
-  grid-column: 1;
-  grid-row: 1 / span 2;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 14px;
-}
-
 .clock-stage {
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
   align-items: center;
-  gap: 16px;
+  gap: clamp(16px, 1.6vw, 32px);
   min-height: 0;
-  position: relative;
-  border-radius: 28px;
-  border: 1px solid rgba(141, 215, 255, 0.16);
-  padding: 12px;
-  background: linear-gradient(135deg, rgba(141, 215, 255, 0.06), rgba(133, 239, 172, 0.04));
-  transition: border-color 400ms ease, box-shadow 500ms ease, background 500ms ease, opacity 1.5s ease;
+  min-width: 0;
 }
 
-.prayer-panel {
-  /* Bottom-right panel: sit under Events and span the full right side. */
-  grid-column: 2 / 4;
-  grid-row: 2 / 3;
-  padding: 12px 16px 10px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  position: relative;
-}
-
-.events-panel {
-  grid-column: 3;
-  grid-row: 1;
+.clock-stage__digital {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-}
-
-.mufrodat-panel {
-  grid-column: 2;
-  grid-row: 1;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-}
-
-.clock-mini {
-  display: grid;
-  align-items: center;
-  gap: 6px;
-  padding: 12px 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--muted);
-  transition: opacity 1.5s ease, background 1.5s ease;
+  gap: 12px;
+  align-content: center;
+  min-height: 0;
+  min-width: 0;
 }
 
 .adhan-counter {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
 .adhan-counter__label {
-  color: var(--accent);
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-  font-size: 0.7rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.adhan-counter.is-active .adhan-counter__label {
+  color: var(--accent-3);
 }
 
 .adhan-counter__value {
@@ -470,12 +418,12 @@ html.video-overlay-active .adhan-overlay {
   font-size: clamp(0.98rem, 1.65vw, 1.18rem);
   font-weight: 700;
   line-height: 1.25;
+  font-variant-numeric: tabular-nums;
 }
 
-.adhan-counter__meta {
+.adhan-counter__value.is-pending {
   color: var(--muted);
-  font-size: 0.78rem;
-  line-height: 1.35;
+  font-weight: 500;
 }
 
 .weather-badge {
@@ -510,57 +458,39 @@ html.video-overlay-active .adhan-overlay {
   padding: 0;
 }
 
+/* The analog face stays, as the owner requires, but it is deliberately sized
+   below the digital readout so the hierarchy has one clear top. Open face,
+   no ring: twelve batons and hairline minute ticks floating straight on the
+   wall background. */
 .analog-clock__face {
   position: relative;
-  width: min(100%, clamp(320px, 21vw, 560px));
+  width: min(100%, clamp(280px, 20vw, 480px));
   aspect-ratio: 1;
   border-radius: 50%;
-  border: 1px solid rgba(141, 215, 255, 0.2);
-  background:
-    radial-gradient(circle at 50% 36%, rgba(141, 215, 255, 0.22), transparent 38%),
-    radial-gradient(circle at center, rgba(7, 13, 24, 0.96), rgba(6, 10, 18, 0.88));
-  box-shadow:
-    inset 0 0 30px rgba(141, 215, 255, 0.08),
-    0 0 36px rgba(0, 0, 0, 0.35);
-  transition: border-color 400ms ease, box-shadow 500ms ease, background 500ms ease;
 }
 
-.analog-clock__marker {
+.analog-clock__tick {
   position: absolute;
-  background: rgba(141, 215, 255, 0.72);
-  transform-origin: center;
+  inset: 0;
 }
 
-.analog-clock__marker--12,
-.analog-clock__marker--6 {
-  width: 2px;
-  height: 12px;
+.analog-clock__tick::before {
+  content: '';
+  position: absolute;
+  top: 4px;
   left: 50%;
-  margin-left: -1px;
+  width: 1px;
+  height: 8px;
+  margin-left: -0.5px;
+  border-radius: 999px;
+  background: rgba(237, 245, 255, 0.3);
 }
 
-.analog-clock__marker--12 {
-  top: 10px;
-}
-
-.analog-clock__marker--6 {
-  bottom: 10px;
-}
-
-.analog-clock__marker--3,
-.analog-clock__marker--9 {
-  width: 12px;
-  height: 2px;
-  top: 50%;
-  margin-top: -1px;
-}
-
-.analog-clock__marker--3 {
-  right: 10px;
-}
-
-.analog-clock__marker--9 {
-  left: 10px;
+.analog-clock__tick--major::before {
+  width: 3px;
+  height: 22px;
+  margin-left: -1.5px;
+  background: rgba(237, 245, 255, 0.9);
 }
 
 .analog-clock__hand {
@@ -572,66 +502,65 @@ html.video-overlay-active .adhan-overlay {
 }
 
 .analog-clock__hand--hour {
-  width: 6px;
+  width: 8px;
   height: 28%;
-  margin-left: -3px;
-  background: linear-gradient(180deg, #edf5ff, #8dd7ff);
+  margin-left: -4px;
+  background: var(--text);
 }
 
 .analog-clock__hand--minute {
-  width: 4px;
-  height: 36%;
-  margin-left: -2px;
-  background: linear-gradient(180deg, #8dd7ff, #85efac);
+  width: 5px;
+  height: 40%;
+  margin-left: -2.5px;
+  background: var(--text);
 }
 
+/* The one moving colour on the face, and it matches the digital seconds:
+   cyan means the clock itself, never an alert. The tail past the centre is
+   the counterweight, so the hand reads as one balanced piece. */
 .analog-clock__hand--second {
   width: 2px;
-  height: 40%;
+  height: 44%;
   margin-left: -1px;
-  background: linear-gradient(180deg, #ff9fcf, #ff5f76);
+  background: var(--accent);
+}
+
+.analog-clock__hand--second::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 2px;
+  /* Against the hand's own height: 26% of a 44%-of-face hand lands the tail
+     about 11% of the face past the centre. */
+  height: 26%;
+  margin-left: -1px;
+  background: var(--accent);
 }
 
 .analog-clock__cap {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 16px;
-  height: 16px;
-  margin-left: -8px;
-  margin-top: -8px;
+  width: 13px;
+  height: 13px;
+  margin-left: -6.5px;
+  margin-top: -6.5px;
   border-radius: 50%;
-  background: #edf5ff;
-  box-shadow: 0 0 0 4px rgba(141, 215, 255, 0.14);
+  background: var(--text);
 }
 
-.analog-clock__label {
-  color: var(--muted);
-  font-size: 0.75rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.panel-heading {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: clamp(6px, 0.6vw, 14px);
-}
-
-.panel-heading h2 {
-  margin: 0;
-  font-size: clamp(1.05rem, 1.1vw, 1.6rem);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.time-list,
-.stack-list {
-  display: grid;
-  gap: 10px;
-  min-height: 0;
+.analog-clock__cap::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  margin-top: -2.5px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 .time-list {
@@ -647,15 +576,15 @@ html.video-overlay-active .adhan-overlay {
   overflow: hidden;
 }
 
+/* Rows are separated by hairline rules rather than stacked cards: six identical
+   boxes would read as six identical things and flatten the list into a grid. */
 .time-row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  padding: 4px 10px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: clamp(7px, 0.62vw, 13px) 0;
+  border-bottom: 1px solid var(--line);
   line-height: 1.2;
 }
 
@@ -669,25 +598,44 @@ html.video-overlay-active .adhan-overlay {
   letter-spacing: 0.04em;
 }
 
+/* A highlighted row is marked by green text and one shared background tint. No
+   left rail: the marker colour was strong enough that the rail read as a
+   separate signal, and four green strokes of different strengths were more than
+   one state needs. */
 .time-row.is-next {
-  border-color: rgba(133, 239, 172, 0.36);
-  background: rgba(133, 239, 172, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(133, 239, 172, 0.16);
+  background: var(--wash-active);
 }
 
+/* One green for the whole highlight language. The row text, the rail label, and
+   the left rail all read --accent-3. A second paler green read as a different
+   state even though it meant the same thing. The value itself stays --text so
+   the time still reads as content rather than as a status colour. */
 .time-row.is-next span,
 .time-row.is-next strong {
-  color: #d9ffe7;
+  color: var(--accent-3);
 }
 
+/* Adhan window (5 minutes, enforced by the blinking target in
+   PrayerTimesPanel). The arrived prayer pulses its green wash while the text
+   stays solid green, so the row stays readable at every point of the cycle. */
 .time-row.is-adhan-active {
-  animation: adhanRowBlink 1s ease-in-out infinite;
-  border-color: rgba(141, 215, 255, 0.55);
+  background: var(--wash-active);
+  animation: adhanBlink 1.2s ease-in-out infinite;
+}
+
+@keyframes adhanBlink {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: var(--wash-active);
+  }
 }
 
 .time-row.is-adhan-active span,
 .time-row.is-adhan-active strong {
-  color: #f2fcff;
+  color: var(--accent-3);
 }
 
 .fallback-note {
@@ -696,34 +644,25 @@ html.video-overlay-active .adhan-overlay {
   line-height: 1.7;
 }
 
-.danger-note {
-  color: #ffb4b4;
-}
-
-.notice-ok {
-  color: #9be7b2;
-}
-
-.next-prayer-card {
-  margin-top: 4px;
-  padding: 6px 10px;
-  border-radius: 16px;
-  border: 1px solid rgba(133, 239, 172, 0.22);
-  background: rgba(133, 239, 172, 0.08);
+.next-prayer {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--wash-active);
   display: grid;
   gap: 4px;
   flex-shrink: 0;
 }
 
-.next-prayer-card span {
+.next-prayer__label {
   color: var(--accent-3);
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-  font-size: 0.64rem;
+  font-size: 0.78rem;
+  font-weight: 600;
 }
 
-.next-prayer-card strong {
-  font-size: 0.88rem;
+.next-prayer__value {
+  color: var(--text);
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .adhan-overlay {
@@ -733,81 +672,71 @@ html.video-overlay-active .adhan-overlay {
   place-content: center;
   gap: 8px;
   text-align: center;
-  border-radius: 22px;
   pointer-events: none;
-  background:
-    radial-gradient(circle at center, rgba(141, 215, 255, 0.24), transparent 56%),
-    rgba(3, 8, 16, 0.74);
-  backdrop-filter: blur(8px);
+  background: rgba(3, 8, 16, 0.9);
   animation: adhanOverlayEnter 260ms ease-out;
 }
 
 .adhan-overlay__kicker {
-  color: rgba(141, 215, 255, 0.9);
-  font-size: 0.72rem;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
+  color: var(--accent-3);
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 .adhan-overlay__title {
   color: #f1fbff;
   font-size: clamp(2rem, 5vw, 3.4rem);
-  letter-spacing: 0.08em;
   font-weight: 700;
-  text-shadow:
-    0 0 18px rgba(141, 215, 255, 0.35),
-    0 0 32px rgba(133, 239, 172, 0.2);
 }
 
-.info-card,
-.mufrodat-card {
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.035);
-}
-
-.info-card {
-  padding: 12px 13px;
+.event-now {
   display: grid;
-  gap: 10px;
+  gap: 4px;
+  align-content: start;
 }
 
-.info-card__top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.info-card__top strong {
-  font-size: 1rem;
-}
-
-.info-card__top span {
-  color: var(--accent);
-  font-size: 0.82rem;
-  white-space: nowrap;
-}
-
-.info-card__bottom {
-  display: grid;
-  gap: 6px;
-}
-
-.info-card__bottom span {
-  color: var(--muted);
-}
-
-.info-card__bottom p {
-  margin: 0;
+.event-now__title {
   color: var(--text);
+  font-size: clamp(1.2rem, 1.8vw, 1.7rem);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.event-now__time {
+  color: var(--accent);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.event-now__note {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
   line-height: 1.55;
 }
 
+.event-next {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+
+.event-next__label {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.event-next__value {
+  color: var(--text);
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .mufrodat-card {
-  padding: 14px;
   display: grid;
   gap: 6px;
+  align-content: start;
 }
 
 .arabic-line {
@@ -823,29 +752,7 @@ html.video-overlay-active .adhan-overlay {
 .event-slot {
   height: 100%;
   min-height: 0;
-}
-
-.event-slot__viewport {
-  height: 100%;
-  min-height: 0;
   overflow: hidden;
-}
-
-.event-slot__track {
-  display: grid;
-  grid-template-rows: repeat(2, minmax(0, 1fr));
-  min-height: 100%;
-  transform: translateY(0);
-  transition: transform 560ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.event-slot__track.is-rolling {
-  transform: translateY(-50%);
-}
-
-.event-slot__card {
-  height: 100%;
-  min-height: 0;
 }
 
 .mufrodat-flip {
@@ -861,69 +768,51 @@ html.video-overlay-active .adhan-overlay {
   transform-style: flat;
   transition:
     opacity 320ms ease,
-    transform 320ms ease,
-    filter 320ms ease;
+    transform 320ms ease;
 }
 
 .mufrodat-flip.is-flipping .mufrodat-flip__inner {
   opacity: 0.08;
   transform: translateY(-6px);
-  filter: blur(1.2px);
-}
-
-.mufrodat-flip.is-settling .mufrodat-flip__inner {
-  animation: settleGlowPulse 420ms ease-out 1;
 }
 
 .mufrodat-flip__card {
   height: 100%;
 }
 
-.footer-stack {
-  display: grid;
-  gap: clamp(10px, 0.9vw, 18px);
-  min-height: 0;
-  overflow: visible;
-  justify-items: center;
-  width: 100%;
-  align-content: end;
-  padding-bottom: clamp(10px, 1.2vw, 34px);
-  transition: opacity 1.5s ease;
+.ticker-footer {
+  border-top: 1px solid var(--line);
+  padding: 10px 0 6px;
+  min-width: 0;
 }
 
-.ticker-shell {
-  margin-top: 0;
-  border-radius: 18px;
-  padding: 9px 14px 6px;
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0;
-  align-items: center;
+.ticker {
   overflow: hidden;
-  transform: translateY(2px);
+  min-width: 0;
 }
 
+/* The track holds two identical groups, so moving it by exactly half its width
+   lands on a seam where the two copies match and the loop is invisible. */
 .ticker-track {
   display: flex;
-  gap: 32px;
-  white-space: nowrap;
-  overflow: hidden;
-  position: relative;
   width: max-content;
-  animation: tickerScroll 26s linear infinite;
+  will-change: transform;
+  animation: tickerScroll linear infinite;
 }
 
-.ticker-track::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(7, 13, 24, 0.08) 16%, rgba(7, 13, 24, 0.08) 84%, transparent);
-  pointer-events: none;
+.ticker__group {
+  display: flex;
+  align-items: center;
+  gap: clamp(28px, 3vw, 56px);
+  padding-right: clamp(28px, 3vw, 56px);
+  white-space: nowrap;
 }
 
 .ticker-item {
-  color: var(--muted);
-  font-size: 0.98rem;
+  color: var(--text);
+  font-size: clamp(0.95rem, 1.05vw, 1.2rem);
+  font-weight: 600;
+  letter-spacing: 0.06em;
 }
 
 @keyframes tickerScroll {
@@ -935,19 +824,7 @@ html.video-overlay-active .adhan-overlay {
   }
 }
 
-@keyframes adhanRowBlink {
-  0%,
-  100% {
-    background: rgba(133, 239, 172, 0.1);
-    box-shadow: inset 0 0 0 1px rgba(133, 239, 172, 0.14);
-  }
-  50% {
-    background: rgba(133, 239, 172, 0.28);
-    box-shadow:
-      inset 0 0 0 1px rgba(133, 239, 172, 0.28),
-      0 0 16px rgba(133, 239, 172, 0.24);
-  }
-}
+
 
 @keyframes adhanOverlayEnter {
   from {
@@ -960,33 +837,6 @@ html.video-overlay-active .adhan-overlay {
   }
 }
 
-@keyframes settleGlowPulse {
-  0% {
-    filter:
-      drop-shadow(0 0 0 rgba(141, 215, 255, 0))
-      drop-shadow(0 0 0 rgba(133, 239, 172, 0));
-  }
-  45% {
-    filter:
-      drop-shadow(0 0 14px rgba(141, 215, 255, 0.24))
-      drop-shadow(0 0 22px rgba(133, 239, 172, 0.16));
-  }
-  100% {
-    filter:
-      drop-shadow(0 0 6px rgba(141, 215, 255, 0.12))
-      drop-shadow(0 0 10px rgba(133, 239, 172, 0.08));
-  }
-}
-
-@keyframes bootFadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 @keyframes announcementFadeIn {
   from {
     opacity: 0;
@@ -996,67 +846,7 @@ html.video-overlay-active .adhan-overlay {
   }
 }
 
-@keyframes bootIntro {
-  0% {
-    opacity: 0;
-    transform: scale(0.98);
-  }
-  15% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  85% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: scale(1.01);
-  }
-}
-
-@keyframes bootIntroCard {
-  0% {
-    transform: translateY(18px);
-    opacity: 0;
-  }
-  20% {
-    transform: translateY(0);
-    opacity: 1;
-  }
-  85% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes bootRingSpin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes bootRingPulse {
-  0%,
-  100% {
-    box-shadow:
-      0 0 18px rgba(109, 188, 255, 0.34),
-      0 0 42px rgba(109, 188, 255, 0.2),
-      inset 0 0 14px rgba(109, 188, 255, 0.24);
-  }
-  50% {
-    box-shadow:
-      0 0 26px rgba(109, 188, 255, 0.45),
-      0 0 58px rgba(109, 188, 255, 0.3),
-      inset 0 0 18px rgba(109, 188, 255, 0.3);
-  }
-}
-
-/* ===== NIGHT MODE — Deep Sleep (21:00 - 04:00) ===== */
+/* ===== NIGHT MODE: Deep Sleep (21:00 - 03:00) ===== */
 html.night-mode,
 html.night-mode body {
   background: #000 !important;
@@ -1067,59 +857,64 @@ html.night-mode .page-shell {
   overflow: hidden;
 }
 
-html.night-mode .page-noise {
-  opacity: 0;
-}
-
-/* HIDE all non-clock panels */
+/* Only the clock stays on screen. Everything else rests until morning. */
 html.night-mode .top-strip,
-html.night-mode .prayer-panel,
-html.night-mode .events-panel,
-html.night-mode .mufrodat-panel,
-html.night-mode .footer-stack,
-html.night-mode .clock-mini {
+html.night-mode .board__secondary,
+html.night-mode .rail,
+html.night-mode .ticker-footer {
   opacity: 0;
   pointer-events: none;
 }
 
-/* CLOCK PANEL — full grid span, flex-centered, transparent */
-html.night-mode .clock-panel {
-  grid-column: 1 / -1;
-  grid-row: 1 / -1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: transparent;
-  backdrop-filter: none;
-  box-shadow: none;
-  overflow: visible !important;
+html.night-mode .board {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+}
+
+html.night-mode .board__main {
+  grid-template-rows: minmax(0, 1fr);
+  justify-items: center;
   position: relative;
   z-index: 10;
 }
 
 html.night-mode .clock-stage {
-  border-color: transparent;
-  box-shadow: none;
-  background: transparent;
-  z-index: 1;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  text-align: center;
 }
 
-html.night-mode .live-clock__time-main {
-  text-shadow: 0 0 30px rgba(255, 255, 255, 0.08);
+html.night-mode .clock-stage__digital {
+  justify-items: center;
 }
 
-html.night-mode .live-clock__date {
-  color: rgba(167, 186, 212, 0.7);
+html.night-mode .live-clock {
+  align-items: center;
 }
 
-html.night-mode .analog-clock__face {
-  border-color: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 0 40px rgba(255, 255, 255, 0.04);
+/* Night mode dims the board to stop waking the room, but never below the AA
+   floor. 0.62 composited over black lands at 4.37:1, so it is raised to 0.72. */
+html.night-mode .live-clock__time-main,
+html.night-mode .live-clock__time-seconds {
+  color: rgba(167, 186, 212, 0.72);
 }
 
-/* v4 Edge glow — ::before conic-gradient + ::after radial vignette */
+html.night-mode .live-clock__date,
+html.night-mode .adhan-counter__value {
+  color: rgba(167, 186, 212, 0.72);
+}
+
+html.night-mode .analog-clock__tick::before {
+  background: rgba(167, 186, 212, 0.26);
+}
+
+html.night-mode .analog-clock__tick--major::before {
+  background: rgba(167, 186, 212, 0.6);
+}
+
+/* Owner-kept RGB edge frame: the one decorative loop that survives, scoped to
+   the night frame only (21:00 to 03:00). It marks "the building sleeps, the
+   board keeps watch" and never appears during daytime operation. */
 html.night-mode .page-shell::before {
   content: '';
   position: absolute;
@@ -1161,23 +956,21 @@ html.night-mode .page-shell::after {
   100% { --glow-angle: 360deg; opacity: 0.45; }
 }
 
-/* ===== VOCAB TAKEOVER — scheduled fullscreen vocabulary (layout: card + vertical clock) ===== */
+/* ===== VOCAB TAKEOVER: scheduled fullscreen vocabulary (layout: card + vertical clock) ===== */
 .vocab-takeover {
   position: fixed;
   inset: 0;
   z-index: 90;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 148px;
-  background:
-    radial-gradient(circle at 18% 12%, rgba(141, 215, 255, 0.1), transparent 42%),
-    linear-gradient(180deg, #050b15, #081322 60%, #0a1828);
+  background: linear-gradient(180deg, #050b15, #081322 60%, #0a1828);
   color: var(--text);
   overflow: hidden;
 }
 
 html.vocab-takeover .top-strip,
-html.vocab-takeover .dashboard-grid,
-html.vocab-takeover .footer-stack {
+html.vocab-takeover .board,
+html.vocab-takeover .ticker {
   opacity: 0;
   pointer-events: none;
 }
@@ -1199,18 +992,15 @@ html.vocab-takeover .footer-stack {
   flex-wrap: wrap;
 }
 
+/* The slot title is a real label for the running lesson, not a decorative pill,
+   so it keeps weight and colour but drops the capsule, the glow, and the
+   underline: green already marks this as the running slot on its own. */
 .vocab-takeover__badge {
   display: inline-flex;
   align-items: center;
-  border: 1px solid rgba(133, 239, 172, 0.4);
-  border-radius: 999px;
-  padding: 0.45rem 1rem;
-  background: rgba(133, 239, 172, 0.1);
-  color: #d9ffe7;
-  font-size: 0.85rem;
+  color: var(--accent-3);
+  font-size: 0.92rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .vocab-takeover__time {
@@ -1266,9 +1056,11 @@ html.vocab-takeover .footer-stack {
   font-size: clamp(1.3rem, 2.6vw, 2.2rem);
 }
 
+/* The example sentence is set off from the meaning it illustrates, so the left
+   rule carries meaning here: it separates a quote from its gloss. */
 .vocab-takeover__example {
   margin-top: clamp(10px, 2.2vw, 30px);
-  border-left: 3px solid rgba(141, 215, 255, 0.5);
+  border-left: 2px solid var(--line-strong);
   padding: 6px 0 6px 22px;
   display: grid;
   gap: 8px;
@@ -1408,433 +1200,68 @@ html.vocab-takeover .footer-stack {
   }
 }
 
-@media (max-width: 720px) {
-  .vocab-takeover {
-    grid-template-columns: minmax(0, 1fr) 96px;
+/* Two decorative loops stop for anyone who asked the system to reduce motion.
+   The ticker, the second hand, and the vocab progress bar keep running: those
+   are the board doing its job, not decoration. */
+@media (prefers-reduced-motion: reduce) {
+  html.night-mode .page-shell::before,
+  .vocab-clock__colon,
+  .live-clock__colon,
+  .time-row.is-adhan-active {
+    animation: none;
   }
 }
 
-@media (max-width: 1080px) {
-  .dashboard-grid {
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: minmax(0, 0.95fr) minmax(0, 1fr) minmax(0, 0.9fr);
-  }
+/* ===== LIVE ANNOUNCEMENT (admin push-to-talk, mirrored on the board) ===== */
 
-  .clock-panel {
-    grid-column: 1 / -1;
-    grid-row: 1;
-  }
-
-  .prayer-panel {
-    grid-column: 1 / -1;
-    grid-row: 3;
-  }
-
-  .events-panel {
-    grid-column: 2;
-    grid-row: 2;
-  }
-
-  .mufrodat-panel {
-    grid-column: 1;
-    grid-row: 2;
-  }
-
-  .clock-stage {
-    grid-template-columns: 1fr;
-  }
-
-  .clock-panel {
-    grid-template-rows: auto auto;
-  }
-}
-
-@media (max-width: 720px) {
-  .page-shell {
-    padding: 12px;
-  }
-
-  .panel-surface,
-  .ticker-shell,
-  .top-strip {
-    border-radius: 16px;
-  }
-
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 0.8fr);
-  }
-
-  .clock-panel,
-  .prayer-panel,
-  .events-panel,
-  .mufrodat-panel {
-    grid-column: auto;
-    grid-row: auto;
-  }
-
-  .clock-panel {
-    order: 0;
-  }
-
-  .events-panel {
-    order: 1;
-  }
-
-  .mufrodat-panel {
-    order: 2;
-  }
-
-  .prayer-panel {
-    order: 3;
-  }
-
-  .top-strip {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .analog-clock__face {
-    width: min(100%, 270px);
-  }
-
-  .ticker-track {
-    gap: 20px;
-  }
-}
-
-.admin-page {
-  min-height: 100dvh;
-  height: 100dvh;
-  padding: 28px;
-  display: grid;
-  gap: 20px;
-  align-content: start;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-gutter: stable;
-}
-
-.admin-hero {
-  border-radius: 28px;
-  padding: 28px;
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.admin-hero h1 {
-  margin: 8px 0 0;
-  font-size: clamp(2rem, 4vw, 3.4rem);
-  line-height: 0.98;
-  letter-spacing: -0.05em;
-}
-
-.admin-status {
-  min-width: 220px;
-  padding: 18px;
-  border-radius: 20px;
-  display: grid;
-  gap: 8px;
-  border: 1px solid rgba(141, 215, 255, 0.18);
-}
-
-.admin-status.ok {
-  background: rgba(133, 239, 172, 0.08);
-}
-
-.admin-status.warn {
-  background: rgba(255, 159, 207, 0.08);
-}
-
-.admin-status strong {
-  font-size: 1rem;
-}
-
-.admin-status span {
-  color: var(--muted);
-  line-height: 1.5;
-}
-
-.admin-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-}
-
-.admin-card {
-  border-radius: 24px;
-  padding: 22px;
-}
-
-.admin-card h2 {
-  margin: 0 0 16px;
-  font-size: 1.2rem;
-}
-
-.span-full {
-  grid-column: 1 / -1;
-}
-
-.admin-form {
-  display: grid;
-  gap: 12px;
-}
-
-.admin-form.compact {
-  margin-bottom: 18px;
-}
-
-.admin-form label {
-  display: grid;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 0.92rem;
-}
-
-.admin-form input,
-.admin-form textarea,
-.admin-form select {
-  width: 100%;
-  border: 1px solid rgba(141, 215, 255, 0.18);
-  border-radius: 14px;
-  padding: 0.85rem 1rem;
-  background: rgba(4, 8, 16, 0.65);
-  color: var(--text);
-  outline: none;
-}
-
-.admin-form input:focus,
-.admin-form textarea:focus,
-.admin-form select:focus {
-  border-color: rgba(141, 215, 255, 0.42);
-  box-shadow: 0 0 0 4px rgba(141, 215, 255, 0.08);
-}
-
-.admin-form button,
-.admin-list-item button {
-  justify-self: start;
-  border: 0;
-  border-radius: 999px;
-  padding: 0.8rem 1.1rem;
-  background: linear-gradient(135deg, rgba(141, 215, 255, 0.95), rgba(133, 239, 172, 0.9));
-  color: #04111e;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.admin-list {
-  display: grid;
-  gap: 12px;
-}
-
-.admin-list-item {
-  display: grid;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.admin-list-item__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.admin-list-item__actions {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.admin-list-item strong {
-  display: block;
-}
-
-.admin-list-item p {
-  margin: 6px 0 0;
-  color: var(--muted);
-}
-
-.admin-list-item .danger {
-  background: linear-gradient(135deg, rgba(255, 159, 207, 0.95), rgba(255, 105, 134, 0.92));
-  color: #1e0710;
-}
-
-.admin-edit-details {
-  min-width: 104px;
-}
-
-.admin-edit-summary {
-  list-style: none;
-  border-radius: 999px;
-  padding: 0.8rem 1.1rem;
-  background: linear-gradient(135deg, rgba(141, 215, 255, 0.95), rgba(130, 178, 255, 0.9));
-  color: #04111e;
-  font-weight: 700;
-  cursor: pointer;
-  user-select: none;
-}
-
-.admin-edit-summary::-webkit-details-marker {
-  display: none;
-}
-
-.admin-inline-edit-form {
-  margin-top: 10px;
-  padding: 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(141, 215, 255, 0.18);
-  background: rgba(4, 8, 16, 0.65);
-  min-width: min(460px, 86vw);
-}
-
-.admin-pagination {
-  margin-top: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(141, 215, 255, 0.18);
-  background: rgba(4, 8, 16, 0.45);
-}
-
-.admin-pagination__link {
-  border-radius: 999px;
-  padding: 0.55rem 0.95rem;
-  border: 1px solid rgba(141, 215, 255, 0.35);
-  color: var(--text);
-  text-decoration: none;
-  font-weight: 600;
-}
-
-.admin-pagination__link:hover {
-  border-color: rgba(141, 215, 255, 0.56);
-  background: rgba(141, 215, 255, 0.12);
-}
-
-.admin-pagination__link.is-disabled {
-  opacity: 0.45;
-  pointer-events: none;
-}
-
-.admin-pagination__meta {
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
-.announcement-admin {
-  border: 1px solid rgba(141, 215, 255, 0.18);
-  border-radius: 16px;
-  padding: 14px;
-  background: rgba(4, 8, 16, 0.45);
-  display: grid;
-  gap: 10px;
-}
-
-.announcement-admin.is-live {
-  border-color: rgba(255, 94, 143, 0.7);
-  box-shadow: 0 0 0 3px rgba(255, 94, 143, 0.16);
-}
-
-.announcement-admin__status-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.announcement-admin__status-row span {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.announcement-admin kbd {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-  background: rgba(141, 215, 255, 0.14);
-  border: 1px solid rgba(141, 215, 255, 0.32);
-  border-radius: 8px;
-  padding: 0.1rem 0.42rem;
-}
-
-.announcement-admin__live {
-  color: #ff95be;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-.announcement-admin__error {
-  color: #ffb2cb;
-  margin: 0;
-}
-
-.announcement-admin__server-control {
-  margin-top: 2px;
-  display: grid;
-  gap: 8px;
-}
-
-.announcement-admin__start-btn {
-  justify-self: start;
-  border: 0;
-  border-radius: 999px;
-  padding: 0.6rem 1rem;
-  background: linear-gradient(135deg, rgba(141, 215, 255, 0.92), rgba(133, 239, 172, 0.88));
-  color: #04111e;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.announcement-admin__start-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.announcement-admin__hint {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.announcement-admin__hint code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-  background: rgba(141, 215, 255, 0.12);
-  border-radius: 7px;
-  padding: 0.06rem 0.36rem;
-}
-
+/* The frame is only a marker that a human is talking. It must not compete with
+   the announcement itself, so it is one bordered line and nothing else. */
 .live-announcement-overlay {
   position: fixed;
   inset: 0;
   z-index: 96;
-  background: rgba(0, 0, 0, 0.45);
   display: grid;
   place-items: center;
+  background: rgba(0, 0, 0, 0.45);
   pointer-events: none;
   animation: announcementFadeIn 220ms ease-out;
 }
 
-.live-announcement-overlay__badge {
-  border: 1px solid rgba(255, 169, 201, 0.75);
-  background: rgba(31, 4, 14, 0.74);
+.live-announcement-overlay__badge,
+.live-announcement-overlay__peer {
+  border-left: 3px solid #ff5f76;
+  background: rgba(28, 6, 12, 0.86);
   color: #ffd9e8;
-  border-radius: 999px;
-  padding: 0.72rem 1.4rem;
+  padding: 0.72rem 1.2rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  box-shadow:
-    0 0 0 1px rgba(255, 169, 201, 0.2) inset,
-    0 0 26px rgba(255, 105, 160, 0.3);
+  font-size: 1.05rem;
 }
 
+.live-announcement-overlay__peer {
+  grid-row: 2;
+  justify-self: center;
+  border-left-color: var(--line-strong);
+  background: rgba(6, 11, 20, 0.86);
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.live-announcement-overlay__unlock {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  pointer-events: auto;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.72);
+  color: var(--text);
+  padding: 8px 12px;
+  font-size: 0.85rem;
+}
+
+/* The speech itself goes to a screen reader, not to the wall. */
 .live-announcement-sr {
   position: absolute;
   width: 1px;
@@ -1847,90 +1274,921 @@ html.vocab-takeover .footer-stack {
   border: 0;
 }
 
-.media-preview-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 18px;
+@media (max-width: 720px) {
+  .vocab-takeover {
+    grid-template-columns: minmax(0, 1fr) 96px;
+  }
 }
 
-.media-preview-card {
-  display: grid;
-  gap: 10px;
-  padding: 16px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.035);
-}
-
-.media-preview-card strong {
-  font-size: 0.98rem;
-}
-
-.media-preview-video,
-.media-preview-card audio {
-  width: 100%;
-}
-
-.media-preview-background {
-  width: 100%;
-  min-height: 96px;
-  border-radius: 16px;
-  border: 1px solid rgba(141, 215, 255, 0.18);
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-}
-
-.sponsor-preview-section {
-  display: grid;
-  gap: 12px;
-}
-
-.sponsor-preview-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 150px));
-  gap: 10px;
-}
-
-.sponsor-preview-card {
-  display: grid;
-  gap: 8px;
-  padding: 10px;
-  border-radius: 16px;
-  border: 1px solid rgba(141, 215, 255, 0.16);
-  background: rgba(4, 8, 16, 0.45);
-}
-
-.sponsor-preview-image {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  max-height: 92px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.sponsor-preview-card span {
-  color: var(--text);
-  font-size: 0.88rem;
-  text-transform: capitalize;
-}
-
-@media (max-width: 900px) {
-  .admin-grid,
-  .admin-hero {
-    grid-template-columns: 1fr;
-    display: grid;
+@media (max-width: 1080px) {
+  .board {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
   }
 
-  .media-preview-grid {
+  .rail {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding-left: 0;
+    padding-top: 12px;
+  }
+
+  .clock-stage {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 720px) {
-  .admin-page {
-    padding: 16px;
+  .page-shell {
+    padding: 12px;
+    overflow-y: auto;
+  }
+
+  .board__secondary {
+    grid-template-columns: 1fr;
+  }
+
+  .top-strip {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .top-strip__dates {
+    justify-content: flex-start;
+  }
+
+  .analog-clock__face {
+    width: min(100%, 320px);
+  }
+
+  .ticker__group {
+    gap: 20px;
+    padding-right: 20px;
+  }
+}
+
+/* ================================================================
+   CONTROL CONSOLE  ( /admin and /control/vocab )
+   ------------------------------------------------------------
+   The board is emissive and dark because it hangs on a wall in a
+   dim room. The console is read at arm's length on a desk, so it
+   does not borrow the board's glow: flat surfaces, hairline rules
+   between rows, one radius value, and no decorative motion at all.
+   Sections stack as a document with a table of contents, because
+   the operator is walking a checklist, not browsing tiles.
+   ================================================================ */
+
+.console {
+  height: 100dvh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* No top padding on purpose. A scroll container's padding insets the sticky
+     offset box, so `top: 0` on the index would park it below the viewport top
+     and let rows scroll through the gap above it. The space lives on the
+     masthead instead, where it cannot move. */
+  padding: 0 clamp(16px, 3vw, 44px) 96px;
+  background: linear-gradient(180deg, #060b14, #0a1220 60%, #0c1728);
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+.console > * {
+  max-width: 980px;
+  margin-inline: auto;
+}
+
+/* ---------- masthead ---------- */
+
+.console__head {
+  display: grid;
+  gap: 20px;
+  padding: clamp(24px, 3vw, 44px) 0 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.console__headline h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 2.6vw, 2.1rem);
+  font-weight: 620;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.console__headline p {
+  margin: 8px 0 0;
+  max-width: 62ch;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.console__headline code,
+.console code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  color: var(--text);
+  background: rgba(141, 215, 255, 0.1);
+  padding: 0.08em 0.34em;
+  border-radius: 4px;
+}
+
+/* Real facts, not a status pill: where the data lives, when it was last
+   written, and how much of it there is. All three come from disk. */
+.console__facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+
+.console__facts > div {
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  background: #0a1220;
+}
+
+.console__facts dt {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.console__facts dd {
+  margin: 0;
+  font-size: 0.98rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.console__facts--inline {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.console__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* ---------- save feedback ---------- */
+
+.console__notice {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  background: #0a1220;
+  font-size: 0.95rem;
+}
+
+.console__notice[data-tone='ok'] {
+  border-left-color: var(--accent-3);
+}
+
+.console__notice[data-tone='error'] {
+  border-left-color: #ff5f76;
+}
+
+.console__notice span {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+/* ---------- table of contents ---------- */
+
+/* The index and the last save result are one instrument strip. After a save the
+   page jumps to the section that was edited, which would put a notice pinned
+   at the top of the document off screen, so the result travels with the
+   navigation instead of sitting above the first section. */
+.console__sticky {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: grid;
+  gap: 8px;
+  padding: 11px 0;
+  background: linear-gradient(180deg, #060b14 86%, rgba(6, 11, 20, 0));
+}
+
+.console__index {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.console__index-title {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.console__groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.console__group {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.console__group-title {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.console__group ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.console__index a {
+  color: var(--text);
+  font-size: 0.9rem;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 1px;
+}
+
+.console__index a:hover {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+
+/* The jumped-to section names itself: its heading takes the accent color while
+   the URL hash points at it, and the matching index link does the same. Both
+   are pure CSS (:target plus :has), so no script watches the scroll position. */
+.panel:target .panel__head h2 {
+  color: var(--accent);
+}
+
+.console:has(#ticker:target) .console__index a[href='#ticker'],
+.console:has(#sholat:target) .console__index a[href='#sholat'],
+.console:has(#layar:target) .console__index a[href='#layar'],
+.console:has(#kegiatan:target) .console__index a[href='#kegiatan'],
+.console:has(#suara:target) .console__index a[href='#suara'],
+.console:has(#mufrodat:target) .console__index a[href='#mufrodat'],
+.console:has(#video:target) .console__index a[href='#video'],
+.console:has(#kosakata:target) .console__index a[href='#kosakata'],
+.console:has(#pengumuman:target) .console__index a[href='#pengumuman'] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ---------- sections ---------- */
+
+.panel {
+  padding: 30px 0 34px;
+  border-bottom: 1px solid var(--line);
+  scroll-margin-top: 86px;
+}
+
+/* With a notice in the strip the strip is taller, so the jump has to clear
+   more. `:has` is the honest way to know, without a resize listener. */
+.console:has(.console__notice) .panel {
+  scroll-margin-top: 159px;
+}
+
+.panel:last-of-type {
+  border-bottom: 0;
+}
+
+.panel__head {
+  max-width: 66ch;
+  margin-bottom: 20px;
+}
+
+.panel__head h2 {
+  margin: 0;
+  font-size: 1.22rem;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+}
+
+.panel__head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.93rem;
+  line-height: 1.55;
+}
+
+/* ---------- forms ---------- */
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 18px;
+  align-items: start;
+}
+
+.field-grid__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 10px;
+}
+
+.field-set-title {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.field > span,
+.field > legend {
+  color: var(--muted);
+  font-size: 0.86rem;
+  padding: 0;
+}
+
+.field small {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.field small a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.field--wide {
+  grid-column: 1 / -1;
+}
+
+.field--span-2 {
+  grid-column: 1 / -1;
+}
+
+/* Day checkboxes sit in one row so a seven-day week is scannable at a glance. */
+.field--checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.field--checks legend {
+  flex-basis: 100%;
+}
+
+.field--checks label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.field--check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.field--check > span {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+input[type='text'],
+input[type='search'],
+input[type='email'],
+input[type='url'],
+input[type='number'],
+input[type='time'],
+input:not([type]),
+textarea,
+select {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0c1728;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+select {
+  cursor: pointer;
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+input[type='file'] {
+  width: 100%;
+  padding: 8px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 6px;
+  background: #0a1220;
+  color: var(--muted);
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #04121d;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: #a6e0ff;
+}
+
+.btn--quiet {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.btn--quiet:hover {
+  background: rgba(141, 215, 255, 0.1);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.btn--danger {
+  background: transparent;
+  border-color: rgba(255, 95, 118, 0.5);
+  color: #ff8a9b;
+}
+
+.btn--danger:hover {
+  background: rgba(255, 95, 118, 0.12);
+  border-color: #ff5f76;
+  color: #ffb3bf;
+}
+
+.btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  border-color: var(--line);
+  background: transparent;
+  color: var(--text);
+}
+
+.btn[data-pending='true'] {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* A disabled pager step is a span, not a link, so it never takes focus. */
+.btn.is-off {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* ---------- row lists ---------- */
+
+.rows {
+  display: grid;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.row__body {
+  flex: 1 1 280px;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.row__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.row__title strong {
+  font-weight: 600;
+}
+
+.row__day {
+  min-width: 52px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.row__meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.row__actions audio {
+  width: 100%;
+  max-width: 300px;
+  min-width: 200px;
+}
+
+.row__video {
+  width: 200px;
+  border: 1px solid var(--line);
+  background: #000;
+}
+
+.arabic {
+  font-family: var(--font-noto-sans-arabic);
+  font-size: 1.15rem;
+  font-weight: 400;
+}
+
+/* Green is reserved for a state, never decoration. */
+.tag {
+  padding: 1px 7px;
+  border: 1px solid rgba(133, 239, 172, 0.45);
+  border-radius: 4px;
+  background: var(--wash-active);
+  color: var(--accent-3);
+  font-size: 0.78rem;
+}
+
+.tag[data-off] {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+}
+
+/* ---------- disclosure ---------- */
+
+.disclosure {
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0a1220;
+}
+
+.disclosure > summary {
+  padding: 11px 14px;
+  color: var(--text);
+  font-size: 0.92rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.disclosure > summary::after {
+  content: ' buka';
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.disclosure[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.disclosure[open] > summary::after {
+  content: ' tutup';
+}
+
+.disclosure > *:not(summary) {
+  padding: 14px;
+}
+
+.disclosure > .field-grid > *:not(.field-grid__actions) {
+  padding: 0;
+}
+
+.disclosure--inline {
+  position: relative;
+  margin: 0;
+  background: transparent;
+}
+
+.disclosure--inline > summary {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+}
+
+.disclosure--inline[open] {
+  flex-basis: 100%;
+  background: #0a1220;
+}
+
+.disclosure--inline > *:not(summary) {
+  margin-top: 12px;
+}
+
+/* ---------- status line and pager ---------- */
+
+.status-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  margin-bottom: 20px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  background: #0a1220;
+}
+
+.status-line[data-live='true'] {
+  border-left-color: var(--accent-3);
+}
+
+.status-line__label {
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.status-line__value {
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+
+.status-line form {
+  margin-left: auto;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.pager__meta {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- media previews ---------- */
+
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 18px;
+  align-items: start;
+}
+
+.media-grid__strip {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 4px;
+}
+
+.media-grid__strip figure {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  min-width: 0;
+}
+
+.media-grid__strip figure > span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.shot {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  background: #000;
+}
+
+.shot--empty {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.82rem;
+  background: #0a1220;
+  border-style: dashed;
+}
+
+.media-grid__strip audio {
+  width: 100%;
+  align-self: start;
+}
+
+.two-up {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.empty {
+  margin: 18px 0 0;
+  padding: 16px;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+/* ---------- push to talk ---------- */
+
+.ptt {
+  display: grid;
+  gap: 10px;
+  max-width: 62ch;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  background: #0a1220;
+}
+
+.ptt[data-live='true'] {
+  border-left-color: #ff5f76;
+}
+
+.ptt__state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.ptt__label {
+  font-weight: 600;
+}
+
+.ptt__label[data-live='true'] {
+  color: #ff8a9b;
+}
+
+.ptt__link {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.ptt__help,
+.ptt__note,
+.ptt__error {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.ptt__help,
+.ptt__note {
+  color: var(--muted);
+}
+
+.ptt__error {
+  color: #ff8a9b;
+}
+
+.ptt kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 1px 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: #0c1728;
+  font-size: 0.82em;
+}
+
+@media (max-width: 720px) {
+  .console__facts,
+  .console__facts--inline {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Nine wrapped links plus a notice would eat a quarter of a phone screen, so
+     the strip scrolls away and the anchor offset is dropped with it. */
+  .console__sticky {
+    position: static;
+  }
+
+  .panel,
+  .console:has(.console__notice) .panel {
+    scroll-margin-top: 0;
+  }
+
+  .console__index {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .console__groups {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .console__group {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .field-grid,
+  .media-grid,
+  .media-grid__strip,
+  .two-up {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .row__actions {
+    margin-left: 0;
+  }
+
+  .row__video {
+    width: 100%;
   }
 }

@@ -16,6 +16,7 @@ export type VocabItem = {
 
 type ActivePayload = {
   slot?: VocabSlot | null;
+  slots?: VocabSlot[];
   items?: VocabItem[];
 };
 
@@ -50,12 +51,12 @@ function VocabClock() {
       hour12: false,
     }).formatToParts(now);
     const byType = new Map(fmt.map((part) => [part.type, part.value]));
-    const day = new Intl.DateTimeFormat('id-ID', { weekday: 'short', timeZone: 'Asia/Jakarta' }).format(now);
+    const day = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'Asia/Jakarta' }).format(now);
     return { hh: byType.get('hour') || '--', mm: byType.get('minute') || '--', day };
   }, [now]);
 
   return (
-    <div className="vocab-clock" aria-label={`Jam ${parts.hh}:${parts.mm}`}>
+    <div className="vocab-clock" aria-label={`Time ${parts.hh}:${parts.mm}`}>
       <span className="vocab-clock__digits">{parts.hh}</span>
       <span className="vocab-clock__colon" aria-hidden="true">:</span>
       <span className="vocab-clock__digits">{parts.mm}</span>
@@ -77,6 +78,7 @@ export function VocabTakeoverOverlay({
   const [loadError, setLoadError] = useState(false);
   const [index, setIndex] = useState(0);
   const [liveIndex, setLiveIndex] = useState<number | null>(null);
+  const lastScheduleJsonRef = useRef('');
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const effectiveSlots = remoteSlots ?? slots;
@@ -100,6 +102,12 @@ export function VocabTakeoverOverlay({
       const response = await fetch('/api/vocab/active', { cache: 'no-store' });
       if (!response.ok) return;
       const payload = (await response.json()) as ActivePayload;
+      // New arrays every poll would re-run the card-audio effect and replay the
+      // sound, so state only moves when the content actually changed.
+      const snapshot = JSON.stringify({ slots: payload.slots ?? null, items: payload.items ?? null });
+      if (snapshot === lastScheduleJsonRef.current) return;
+      lastScheduleJsonRef.current = snapshot;
+      if (Array.isArray(payload.slots)) setRemoteSlots(payload.slots);
       if (Array.isArray(payload.items)) setRemoteItems(payload.items);
       setLoadError(false);
     } catch {
@@ -107,11 +115,14 @@ export function VocabTakeoverOverlay({
     }
   }, []);
 
+  // The poll runs whether or not a slot is currently active: a slot whose
+  // window just opened must appear on its own, and one that just closed must
+  // leave, both without anyone reloading the board.
   useEffect(() => {
-    if (!activeSlot) return;
+    void refreshSchedule();
     const timer = window.setInterval(refreshSchedule, REFRESH_MS);
     return () => window.clearInterval(timer);
-  }, [activeSlot, refreshSchedule]);
+  }, [refreshSchedule]);
 
   useEffect(() => {
     if (!activeSlot || activeSlot.mode !== 'manual') {
@@ -197,7 +208,7 @@ export function VocabTakeoverOverlay({
       <div className="vocab-takeover" role="status">
         <div className="vocab-takeover__empty">
           <strong>{activeSlot.title}</strong>
-          <p>Belum ada kartu vocab di slot ini. Tambahkan di halaman Vocab Control.</p>
+          <p>No vocabulary cards in this slot yet. Add some on the Vocab Control page.</p>
         </div>
         <VocabClock />
       </div>
@@ -219,11 +230,11 @@ export function VocabTakeoverOverlay({
         <div className="vocab-takeover__stage">
           <div key={`${activeSlot.id}-${current.id}-${visibleIndex}`} className="vocab-takeover__card">
             <div className="vocab-takeover__pair">
-              <span className="vocab-takeover__english">{current.english || '—'}</span>
+              <span className="vocab-takeover__english">{current.english || '-'}</span>
               <span className="vocab-takeover__sep" aria-hidden="true">/</span>
-              <span className="vocab-takeover__arabic">{current.arabic || '—'}</span>
+              <span className="vocab-takeover__arabic">{current.arabic || '-'}</span>
             </div>
-            <p className="vocab-takeover__meaning">{current.meaning || '—'}</p>
+            <p className="vocab-takeover__meaning">{current.meaning || '-'}</p>
             {current.exampleAr || current.exampleMeaning ? (
               <div className="vocab-takeover__example">
                 {current.exampleAr ? <p className="vocab-takeover__example-ar">{current.exampleAr}</p> : null}
@@ -253,7 +264,7 @@ export function VocabTakeoverOverlay({
             style={{ animationDuration: `${intervalSec}s` }}
           />
         ) : null}
-        {loadError ? <p className="vocab-takeover__warn">Koneksi pembaruan lambat, menampilkan jadwal tersimpan.</p> : null}
+        {loadError ? <p className="vocab-takeover__warn">Update connection is slow, showing the saved schedule.</p> : null}
       </div>
       <aside className="vocab-takeover__side">
         <VocabClock />

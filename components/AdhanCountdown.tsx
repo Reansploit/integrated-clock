@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { PrayerTimes } from '@/lib/prayer';
 
@@ -17,7 +17,6 @@ type CountdownState =
       mode: 'active';
       label: string;
       value: string;
-      soundKey: string;
     }
   | {
       mode: 'idle';
@@ -30,8 +29,6 @@ type ClockParts = {
   minute: number;
   second: number;
 };
-
-const AUDIO_UNLOCKED_KEY = 'clock-audio-unlocked';
 
 function getJakartaParts(now: Date): ClockParts {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -85,42 +82,19 @@ function buildTargets(prayerTimes: PrayerTimes): Target[] {
 
   if (subuh !== null) {
     targets.push({ label: 'Imsak', kind: 'imsak', minutes: Math.max(0, subuh - 15) });
-    targets.push({ label: 'Fajr Adhan', kind: 'adhan', minutes: subuh });
+    targets.push({ label: 'Fajr', kind: 'adhan', minutes: subuh });
   }
 
-  if (dzuhur !== null) targets.push({ label: 'Dhuhr Adhan', kind: 'adhan', minutes: dzuhur });
-  if (ashar !== null) targets.push({ label: 'Asr Adhan', kind: 'adhan', minutes: ashar });
-  if (maghrib !== null) targets.push({ label: 'Maghrib Adhan', kind: 'adhan', minutes: maghrib });
-  if (isya !== null) targets.push({ label: 'Isha Adhan', kind: 'adhan', minutes: isya });
+  if (dzuhur !== null) targets.push({ label: 'Dhuhr', kind: 'adhan', minutes: dzuhur });
+  if (ashar !== null) targets.push({ label: 'Asr', kind: 'adhan', minutes: ashar });
+  if (maghrib !== null) targets.push({ label: 'Maghrib', kind: 'adhan', minutes: maghrib });
+  if (isya !== null) targets.push({ label: 'Isha', kind: 'adhan', minutes: isya });
 
   return targets.sort((left, right) => left.minutes - right.minutes);
 }
 
-function playSound(url: string, onBlocked?: () => void) {
-  if (!url) return Promise.resolve(false);
-  const audio = new Audio(url);
-  audio.volume = 0.7;
-  audio.preload = 'auto';
-  audio.setAttribute('playsinline', 'true');
-  return audio.play()
-    .then(() => true)
-    .catch(() => {
-      onBlocked?.();
-      return false;
-    });
-}
-
-export function AdhanCountdown({
-  prayerTimes,
-  soundUrl,
-}: {
-  prayerTimes: PrayerTimes | null;
-  soundUrl?: string;
-}) {
+export function AdhanCountdown({ prayerTimes }: { prayerTimes: PrayerTimes | null }) {
   const [now, setNow] = useState<Date | null>(null);
-  const lastSoundKey = useRef<string | null>(null);
-  const pendingSoundUrlRef = useRef<string>('');
-  const pendingRetryRef = useRef(false);
 
   useEffect(() => {
     const update = () => setNow(new Date());
@@ -155,7 +129,7 @@ export function AdhanCountdown({
 
       return {
         mode: 'idle' as const,
-        label: nextTarget.kind === 'imsak' ? 'Next imsak' : 'Next prayer',
+        label: 'Next prayer',
         value: `${nextTarget.label} at ${formatClock(nextTarget.minutes)}`,
       };
     }
@@ -165,69 +139,25 @@ export function AdhanCountdown({
 
     return {
       mode: 'active' as const,
-      label: activeTarget.kind === 'imsak' ? 'Imsak countdown' : 'Adhan countdown',
-      value: `${activeTarget.label} ${formatDuration(remaining)}`,
-      soundKey: `${activeTarget.kind}-${activeTarget.minutes}`,
+      label: activeTarget.kind === 'imsak' ? 'Until imsak' : 'Until adhan',
+      value: `${activeTarget.label} in ${formatDuration(remaining)}`,
     };
   }, [now, prayerTimes]);
-
-  useEffect(() => {
-    const retryPendingAudio = () => {
-      window.localStorage.setItem(AUDIO_UNLOCKED_KEY, '1');
-      if (!pendingRetryRef.current || !pendingSoundUrlRef.current) {
-        return;
-      }
-      void playSound(pendingSoundUrlRef.current).then((played) => {
-        if (played) {
-          pendingRetryRef.current = false;
-          pendingSoundUrlRef.current = '';
-        }
-      });
-    };
-
-    window.addEventListener('pointerdown', retryPendingAudio, { passive: true });
-    window.addEventListener('keydown', retryPendingAudio);
-    window.addEventListener('touchstart', retryPendingAudio, { passive: true });
-
-    return () => {
-      window.removeEventListener('pointerdown', retryPendingAudio);
-      window.removeEventListener('keydown', retryPendingAudio);
-      window.removeEventListener('touchstart', retryPendingAudio);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!state || state.mode !== 'active' || !soundUrl) {
-      return;
-    }
-
-    if (lastSoundKey.current === state.soundKey) {
-      return;
-    }
-
-    lastSoundKey.current = state.soundKey;
-    pendingSoundUrlRef.current = soundUrl;
-    void playSound(soundUrl, () => {
-      pendingRetryRef.current = true;
-    }).then((played) => {
-      if (played) {
-        pendingRetryRef.current = false;
-        pendingSoundUrlRef.current = '';
-      }
-    });
-  }, [soundUrl, state]);
 
   if (!state) {
     return (
       <div className="adhan-counter" suppressHydrationWarning>
-        <div className="adhan-counter__label">Adhan countdown</div>
-        <div className="adhan-counter__value">Loading...</div>
+        <div className="adhan-counter__label">Adhan</div>
+        <div className="adhan-counter__value is-pending">Syncing schedule...</div>
       </div>
     );
   }
 
   return (
-    <div className="adhan-counter" suppressHydrationWarning>
+    <div
+      className={`adhan-counter ${state.mode === 'active' ? 'is-active' : ''}`}
+      suppressHydrationWarning
+    >
       <div className="adhan-counter__label">{state.label}</div>
       <div className="adhan-counter__value">{state.value}</div>
     </div>

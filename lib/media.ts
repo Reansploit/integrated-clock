@@ -11,6 +11,17 @@ function normalizeAssetUrl(relativePath: string) {
   return `/assets/${relativePath.split(path.sep).join('/')}`;
 }
 
+/**
+ * path.relative() hands back the platform separator, so on Windows it produces
+ * "audio\events\alarm.mp3" while every directory list and URL in this file is
+ * written with forward slashes. Comparing the two directly never matches, which
+ * is why the folder scans used to come back empty on Windows. Converting here
+ * keeps the comparisons and the emitted URLs in one spelling.
+ */
+function toPosixRelative(root: string, file: string) {
+  return path.relative(root, file).split(path.sep).join('/');
+}
+
 function readAssetFiles(root: string, files: string[] = []) {
   if (!fs.existsSync(root)) {
     return files;
@@ -77,9 +88,8 @@ export function resolveAssetUrl(value: string, preferredDirs: string[] = []) {
   const filename = path.basename(trimmed).toLowerCase();
 
   const preferredMatch = assetFiles.find((file) => {
-    const relative = path.relative(assetsRoot, file);
-    const relativeLower = relative.toLowerCase();
-    const nameMatches = path.basename(relative).toLowerCase() === filename;
+    const relativeLower = toPosixRelative(assetsRoot, file).toLowerCase();
+    const nameMatches = path.basename(relativeLower) === filename;
     const folderMatches = normalizedPreferred.some((dir) => relativeLower.startsWith(`${dir}/`));
     return nameMatches && (folderMatches || normalizedPreferred.length === 0);
   });
@@ -100,7 +110,7 @@ export function listAssetUrls(preferredDirs: string[] = [], extensions: string[]
   const normalizedExtensions = extensions.map((ext) => ext.toLowerCase());
 
   return assetFiles
-    .map((file) => path.relative(assetsRoot, file))
+    .map((file) => toPosixRelative(assetsRoot, file))
     .filter((relative) => {
       const relativeLower = relative.toLowerCase();
       const inPreferred =

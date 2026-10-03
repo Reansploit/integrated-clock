@@ -4,11 +4,9 @@ import {
   getMufrodat,
   getMufrodatVideos,
   getSettings,
-  getStats,
   getTicker,
   getVocabItems,
   getVocabSlots,
-  isDatabaseConfigured,
   normalizeDayOrder,
   type VocabItemRow,
   type VocabSlotRow,
@@ -28,10 +26,8 @@ export type DashboardData = {
   mufrodat: MufrodatItem[];
   mufrodatVideos: MufrodatVideoItem[];
   ticker: string[];
-  stats: Awaited<ReturnType<typeof getStats>>;
   vocabItems: VocabItem[];
   vocabSlots: VocabSlot[];
-  isDatabaseConfigured: boolean;
 };
 
 type GetDashboardDataOptions = {
@@ -48,17 +44,11 @@ export async function getDashboardData(options?: GetDashboardDataOptions): Promi
     getVocabItems(),
     getVocabSlots(),
   ]);
-  const [eventSounds, mufrodatVideos, stats] = includeAdminData
-    ? await Promise.all([getEventSounds(), getMufrodatVideos(), getStats()])
+  const [eventSounds, mufrodatVideos] = includeAdminData
+    ? await Promise.all([getEventSounds(), getMufrodatVideos()])
     : await Promise.all([
         Promise.resolve([] as EventSoundItem[]),
         Promise.resolve([] as MufrodatVideoItem[]),
-        Promise.resolve({
-          settings: 0,
-          events: 0,
-          mufrodat: 0,
-          ticker: 0,
-        }),
       ]);
 
   return {
@@ -73,9 +63,7 @@ export async function getDashboardData(options?: GetDashboardDataOptions): Promi
     mufrodat,
     mufrodatVideos,
     ticker,
-    stats,
     vocabItems,
     vocabSlots,
-    isDatabaseConfigured: isDatabaseConfigured(),
   };
 }

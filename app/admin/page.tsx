@@ -1,622 +1,872 @@
 import {
+  clearBackgroundImage,
   createEvent,
   createMufrodat,
   deleteEvent,
   deleteMufrodat,
   deleteMufrodatVideo,
   importEvents,
+  playMufrodatVideoOnce,
+  saveCitySettings,
+  saveDisplaySettings,
   saveMufrodatVideoSettings,
-  saveSettings,
   saveTicker,
   stopMufrodatVideoPlayback,
   updateEvent,
+  uploadBackgroundImage,
   uploadEventSound,
   uploadMufrodatVideoToPlaylist,
 } from './actions';
 
 import { AdminAnnouncementControl } from '@/components/AdminAnnouncementControl';
+import { SubmitButton } from '@/components/SubmitButton';
 import { getDashboardData } from '@/lib/dashboard';
-import { isDatabaseConfigured } from '@/lib/db';
+import { getDbWriteInfo } from '@/lib/db';
 import { listAssetUrls, resolveAssetUrl } from '@/lib/media';
+import { readNoticeDetail, resolveNotice } from '@/lib/panel-notice';
 
 export const dynamic = 'force-dynamic';
 
-function parseSponsorEntries(raw: string) {
-  return raw
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .map((entry) => {
-      const [labelPart, srcPart] = entry.split('|').map((part) => part.trim());
-      return {
-        label: labelPart || 'Sponsor',
-        src: resolveAssetUrl(srcPart || '', ['sponsors']),
-      };
-    })
-    .filter((entry) => entry.src);
-}
+/**
+ * Design Read: a control console for one staff member editing what a wall
+ * display shows, on a laptop or a phone over the LAN. The decision it exists
+ * for is change one thing, then see that it changed. It is a workbench, so it
+ * reads top to bottom as a document with a table of contents, not as a grid of
+ * identical cards.
+ *
+ * Dials: ENERGY 1 / RHYTHM 2 / MOTION 1.
+ */
 
 const EVENTS_PER_PAGE = 8;
 
+const WEEK_DAYS = [
+  { value: 'senin', label: 'Senin' },
+  { value: 'selasa', label: 'Selasa' },
+  { value: 'rabu', label: 'Rabu' },
+  { value: 'kamis', label: 'Kamis' },
+  { value: 'jumat', label: 'Jumat' },
+  { value: 'sabtu', label: 'Sabtu' },
+  { value: 'minggu', label: 'Minggu' },
+] as const;
+
+const SECTION_GROUPS = [
+  {
+    title: 'Papan',
+    links: [
+      { href: '#ticker', label: 'Teks berjalan' },
+      { href: '#sholat', label: 'Kota dan jadwal sholat' },
+      { href: '#layar', label: 'Layar dan suara bawaan' },
+    ],
+  },
+  {
+    title: 'Jadwal',
+    links: [{ href: '#kegiatan', label: 'Kegiatan' }],
+  },
+  {
+    title: 'Audio',
+    links: [{ href: '#suara', label: 'Perpustakaan suara' }],
+  },
+  {
+    title: 'Bahasa',
+    links: [
+      { href: '#mufrodat', label: 'Mufrodat' },
+      { href: '#video', label: 'Video mufrodat' },
+      { href: '#kosakata', label: 'Kosakata (halaman sendiri)' },
+    ],
+  },
+  {
+    title: 'Siaran',
+    links: [{ href: '#pengumuman', label: 'Pengumuman langsung' }],
+  },
+] as const;
+
 type AdminPageProps = {
-  searchParams?: Promise<{ page?: string; notice?: string }>;
+  searchParams?: Promise<{ page?: string; notice?: string; detail?: string }>;
 };
 
-function resolveAdminNotice(raw: string) {
-  switch (raw) {
-    case 'mufrodat-upload-ok':
-      return { tone: 'ok', text: 'Upload video sekali putar berhasil dan playback sudah ditrigger.' };
-    case 'mufrodat-upload-no-file':
-      return { tone: 'warn', text: 'Upload gagal: file belum terpilih.' };
-    case 'mufrodat-upload-size-limit':
-      return { tone: 'warn', text: 'Upload gagal: ukuran file harus > 0 dan maksimal 100MB.' };
-    case 'mufrodat-upload-ext-invalid':
-      return { tone: 'warn', text: 'Upload gagal: format file harus .mp4 atau .webm.' };
-    case 'mufrodat-upload-mime-invalid':
-      return { tone: 'warn', text: 'Upload gagal: MIME type video tidak didukung browser/server.' };
-    case 'mufrodat-upload-db-missing':
-      return { tone: 'warn', text: 'Upload gagal: database lokal tidak bisa ditulis.' };
-    case 'mufrodat-upload-failed':
-      return { tone: 'warn', text: 'Upload gagal karena error server. Cek log terminal untuk detail.' };
-    default:
-      return null;
+function fileNameOf(url: string) {
+  const clean = url.split('?')[0] || url;
+  const segments = clean.split('/');
+  return segments[segments.length - 1] || clean;
+}
+
+/**
+ * Older rows stored a bare path such as "audio/events/alarm.mp3" while the
+ * options carry "/assets/...". Resolving first lets those land on a real option,
+ * so reopening and saving migrates the value instead of stranding it under
+ * "Tidak ditemukan". An unresolvable value comes back unchanged, which is what
+ * keeps the fallback option selectable.
+ */
+function normalizeSoundValue(value: string | null | undefined) {
+  return value ? resolveAssetUrl(value, ['audio/events']) : '';
+}
+
+/**
+ * The sound picker offers both places a file can live: rows uploaded to the
+ * library (served out of the database) and recordings already sitting in
+ * assets/audio/events. The library starts empty on a fresh install while the
+ * folder already holds the school's own files, so listing only one of the two
+ * would leave the picker with nothing to pick in one of those states. A value
+ * that is in neither list is kept as its own option, so opening the edit form
+ * never silently drops a setting that used to work.
+ */
+function EventSoundChoices({
+  library,
+  files,
+  current,
+  emptyLabel = 'Tanpa suara khusus',
+}: {
+  library: Array<{ id: number; originalName: string; soundUrl: string }>;
+  files: string[];
+  current?: string | null;
+  emptyLabel?: string;
+}) {
+  const libraryUrls = new Set(library.map((sound) => sound.soundUrl));
+  const resolved = normalizeSoundValue(current);
+  const known = !resolved || libraryUrls.has(resolved) || files.includes(resolved);
+
+  return (
+    <>
+      <option value="">{emptyLabel}</option>
+      {library.length ? (
+        <optgroup label={`Perpustakaan (${library.length})`}>
+          {library.map((sound) => (
+            <option key={sound.id} value={sound.soundUrl}>
+              {sound.originalName}
+            </option>
+          ))}
+        </optgroup>
+      ) : null}
+      {files.length ? (
+        <optgroup label="Folder assets/audio/events">
+          {files.map((src) => (
+            <option key={src} value={src}>
+              {fileNameOf(src)}
+            </option>
+          ))}
+        </optgroup>
+      ) : null}
+      {!known ? (
+        <optgroup label="Tidak ditemukan">
+          <option value={resolved}>Lama: {fileNameOf(resolved)}</option>
+        </optgroup>
+      ) : null}
+    </>
+  );
+}
+
+function formatBytes(bytes: number) {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
+  if (bytes >= 1024) {
+    return `${Math.round(bytes / 1024)} KB`;
+  }
+  return `${bytes} B`;
+}
+
+function formatClock(iso: string | null) {
+  if (!iso) {
+    return 'belum pernah ditulis';
+  }
+  return new Intl.DateTimeFormat('id-ID', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'Asia/Jakarta',
+  }).format(new Date(iso));
+}
+
+function dayLabel(value: string) {
+  return WEEK_DAYS.find((day) => day.value === value)?.label ?? value;
 }
 
 export default async function AdminPage({ searchParams }: AdminPageProps) {
   const data = await getDashboardData({ includeAdminData: true });
-  const resolvedSearchParams = (await searchParams) || {};
-  const notice = resolveAdminNotice(String(resolvedSearchParams.notice || ''));
-  const configured = isDatabaseConfigured();
-  const sponsorEntries = parseSponsorEntries(data.settings.sponsors);
-  const bootAnimationUrl = resolveAssetUrl(data.settings.bootAnimationUrl, ['boot']);
-  const introImageUrl = resolveAssetUrl(data.settings.introImageUrl, ['logos', 'sponsors', 'boot']);
+  const params = (await searchParams) || {};
+  const notice = resolveNotice(params.notice);
+  const noticeDetail = readNoticeDetail(params.detail);
+
+  const dbWrite = getDbWriteInfo();
   const eventSoundUrl = resolveAssetUrl(data.settings.eventSoundUrl, ['audio/events']);
-  const adhanSoundUrl = resolveAssetUrl(data.settings.adhanSoundUrl, ['audio/adhan']);
   const backgroundImageUrl = resolveAssetUrl(data.settings.backgroundImageUrl, ['backgrounds']);
-  const assetEventSoundOptions = listAssetUrls(['audio/events'], ['.mp3', '.wav', '.ogg', '.m4a', '.aac']);
-  const dbEventSoundOptions = data.eventSounds.map((sound) => sound.soundUrl);
-  const allEventSoundOptions = Array.from(new Set([...dbEventSoundOptions, ...assetEventSoundOptions]));
+  const eventSoundFiles = listAssetUrls(['audio/events'], ['.mp3', '.wav', '.ogg', '.m4a', '.aac']);
   const eventSoundNameByUrl = new Map(data.eventSounds.map((sound) => [sound.soundUrl, sound.originalName]));
-  const adhanSoundOptions = listAssetUrls(['audio/adhan'], ['.mp3', '.wav', '.ogg', '.m4a', '.aac']);
-  const mufrodatActiveVideoUrl = resolveAssetUrl(data.settings.mufrodatVideoUrl, ['videos/mufrodat']);
-  const mufrodatScheduleValue = String(data.settings.mufrodatVideoScheduleTimes || '')
+  const activeVideoUrl = resolveAssetUrl(data.settings.mufrodatVideoUrl, ['videos/mufrodat']);
+  const scheduleValue = String(data.settings.mufrodatVideoScheduleTimes || '')
     .split(',')
     .map((part) => part.trim())
     .filter(Boolean)
     .join('\n');
-  const mufrodatPlaybackMode = data.settings.mufrodatVideoPlaybackMode === 'random' ? 'random' : 'sequential';
+  const playbackMode = data.settings.mufrodatVideoPlaybackMode === 'random' ? 'random' : 'sequential';
+  const activeVocabSlots = data.vocabSlots.filter((slot) => slot.enabled);
+  const manualSlot = data.vocabSlots.find((slot) => slot.enabled && slot.mode === 'manual');
+
   const totalEventPages = Math.max(1, Math.ceil(data.events.length / EVENTS_PER_PAGE));
-  const requestedPage = Number.parseInt(String(resolvedSearchParams.page || '1'), 10);
-  const currentEventPage =
-    Number.isFinite(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, totalEventPages) : 1;
-  const startEventIndex = (currentEventPage - 1) * EVENTS_PER_PAGE;
-  const paginatedEvents = data.events.slice(startEventIndex, startEventIndex + EVENTS_PER_PAGE);
-  const announcementAdminToken =
+  const requestedPage = Number.parseInt(String(params.page || '1'), 10);
+  const currentPage = Number.isFinite(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, totalEventPages) : 1;
+  const startIndex = (currentPage - 1) * EVENTS_PER_PAGE;
+  const pageEvents = data.events.slice(startIndex, startIndex + EVENTS_PER_PAGE);
+
+  const announcementToken =
     process.env.ANNOUNCEMENT_ADMIN_TOKEN || process.env.NEXT_PUBLIC_ANNOUNCEMENT_ADMIN_TOKEN || '';
 
   return (
-    <main className="admin-page">
-      <section className="admin-hero glass-panel">
-        <div>
-          <p className="eyebrow">Admin Console</p>
-          <h1>Kelola database dari mana saja</h1>
-          <p className="hero-text">
-            Halaman ini menyimpan konten ke database lokal SQLite. Tanpa server tambahan,
-            data tersimpan di file `data/clock.db` dan ikut ter-backup bersama folder project.
+    <main className="console">
+      <header className="console__head">
+        <div className="console__headline">
+          <h1>Panel admin</h1>
+          <p>
+            Semua isi papan disimpan di satu file SQLite lokal, <code>{dbWrite?.relativePath ?? 'data/clock.db'}</code>.
+            Setelah menyimpan, tekan F5 di papan untuk melihat hasilnya.
           </p>
         </div>
-        <div className={`admin-status ${configured ? 'ok' : 'warn'}`}>
-          <strong>{configured ? 'Database connected' : 'Database not configured'}</strong>
-          <span>{configured ? 'SQLite lokal aktif' : 'Database lokal belum siap'}</span>
+
+        <dl className="console__facts">
+          <div>
+            <dt>Status</dt>
+            <dd>{dbWrite ? 'Database siap' : 'Database belum ada'}</dd>
+          </div>
+          <div>
+            <dt>Terakhir ditulis</dt>
+            <dd>{formatClock(dbWrite?.modifiedAt ?? null)}</dd>
+          </div>
+          <div>
+            <dt>Isi papan</dt>
+            <dd>
+              {data.events.length} kegiatan, {data.ticker.length} baris teks, {data.mufrodat.length} mufrodat
+            </dd>
+          </div>
+        </dl>
+
+        <nav className="console__links" aria-label="Halaman lain">
+          <a className="btn btn--quiet" href="/" target="_blank" rel="noreferrer">
+            Buka papan
+          </a>
+          <a className="btn btn--quiet" href="/control/vocab">
+            Kelola kosakata
+          </a>
+        </nav>
+      </header>
+
+      <div className="console__sticky">
+        <nav className="console__index" aria-label="Daftar bagian">
+          <span className="console__index-title">Bagian</span>
+          <ol className="console__groups">
+            {SECTION_GROUPS.map((group) => (
+              <li key={group.title} className="console__group">
+                <span className="console__group-title">{group.title}</span>
+                <ul>
+                  {group.links.map((section) => (
+                    <li key={section.href}>
+                      <a href={section.href}>{section.label}</a>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ol>
+        </nav>
+
+        {notice ? (
+          <p className="console__notice" data-tone={notice.tone} role="status">
+            <strong>{notice.text}</strong>
+            {noticeDetail ? <span>{noticeDetail}</span> : null}
+          </p>
+        ) : null}
+      </div>
+
+      <section className="panel" id="ticker">
+        <div className="panel__head">
+          <h2>Teks berjalan</h2>
+          <p>
+            Baris paling bawah papan, berjalan dari kanan ke kiri. Satu baris di papan ini = satu baris di
+            kotak bawah.
+          </p>
         </div>
+
+        <form action={saveTicker} className="field-grid">
+          <input type="hidden" name="page" value={currentPage} />
+          <label className="field field--wide">
+            <span>Daftar baris</span>
+            <textarea name="items" rows={6} defaultValue={data.ticker.join('\n')} required />
+            <small>
+              Baris kosong diabaikan. Teks yang terlalu panjang keluar papan lebih cepat daripada teks pendek.
+            </small>
+          </label>
+          <div className="field-grid__actions">
+            <SubmitButton pendingLabel="Menyimpan">Simpan teks berjalan</SubmitButton>
+          </div>
+        </form>
       </section>
 
-      <section className="admin-grid">
-        <article className="admin-card glass-panel">
-          <h2>Settings</h2>
-          <form action={saveSettings} className="admin-form">
-            <label>
-              City name
-              <input name="cityName" defaultValue={data.settings.cityName} />
-            </label>
-            <label>
-              City ID
-              <input name="cityId" defaultValue={data.settings.cityId} />
-            </label>
-            <label>
-              Theme
-              <input name="theme" defaultValue={data.settings.theme} />
-            </label>
-            <label>
-              Running text
-              <textarea name="runningText" rows={4} defaultValue={data.settings.runningText} />
-            </label>
-            <label>
-              Enable adhan
-              <select name="enableAdhan" defaultValue={String(data.settings.enableAdhan)}>
-                <option value="true">true</option>
-                <option value="false">false</option>
-              </select>
-            </label>
-            <label>
-              Boot animation URL (mp4)
-              <input name="bootAnimationUrl" defaultValue={data.settings.bootAnimationUrl} placeholder="/boot.mp4" />
-            </label>
-            <label>
-              Intro image URL (png/jpg/jpeg/gif)
-              <input name="introImageUrl" defaultValue={data.settings.introImageUrl} placeholder="/logo.png" />
-            </label>
-            <label>
-              Event sound URL
-              <input
-                name="eventSoundUrl"
-                list="event-sound-options"
-                defaultValue={data.settings.eventSoundUrl}
-                placeholder="/audio/events/your-file.mp3"
+      <section className="panel" id="sholat">
+        <div className="panel__head">
+          <h2>Kota dan jadwal sholat</h2>
+          <p>Kota menentukan jadwal sholat yang diambil papan. Papan hanya menghitung sisa waktunya, tidak memutar suara.</p>
+        </div>
+
+        <form action={saveCitySettings} className="field-grid">
+          <input type="hidden" name="page" value={currentPage} />
+          <label className="field">
+            <span>Nama kota</span>
+            <input name="cityName" defaultValue={data.settings.cityName} required />
+          </label>
+
+          <label className="field">
+            <span>ID kota</span>
+            <input name="cityId" defaultValue={data.settings.cityId} required inputMode="numeric" />
+            <small>Nomor kota di myquran.com. Jombang 1608.</small>
+          </label>
+
+          <div className="field-grid__actions">
+            <SubmitButton pendingLabel="Menyimpan">Simpan pengaturan</SubmitButton>
+          </div>
+        </form>
+      </section>
+
+      <section className="panel" id="layar">
+        <div className="panel__head">
+          <h2>Layar dan suara bawaan</h2>
+          <p>
+            Gambar latar disembunyikan, lalu mengintip pudar 5 detik setiap 20 detik. Pilih lewat browse file
+            di bawah, file tersimpan di folder assets/backgrounds dan langsung terpasang.
+          </p>
+        </div>
+
+        <form action={uploadBackgroundImage} className="field-grid">
+          <input type="hidden" name="page" value={currentPage} />
+          <label className="field field--wide">
+            <span>Unggah gambar latar</span>
+            <input
+              name="backgroundImage"
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              required
+            />
+            <small>
+              PNG, JPG, GIF, atau WebP, maksimal 10 MB. GIF animasi ikut bergerak di papan.
+            </small>
+          </label>
+          <div className="field-grid__actions">
+            <SubmitButton pendingLabel="Mengunggah">Unggah dan pasang</SubmitButton>
+          </div>
+        </form>
+
+        <form action={saveDisplaySettings} className="media-grid">
+          <input type="hidden" name="page" value={currentPage} />
+          <input type="hidden" name="backgroundImageUrl" value={data.settings.backgroundImageUrl} />
+          <label className="field">
+            <span>Suara bawaan kegiatan</span>
+            <select
+              name="eventSoundUrl"
+              defaultValue={normalizeSoundValue(data.settings.eventSoundUrl)}
+            >
+              <EventSoundChoices
+                library={data.eventSounds}
+                files={eventSoundFiles}
+                current={data.settings.eventSoundUrl}
+                emptyLabel="Tanpa suara bawaan"
               />
-            </label>
-            <label>
-              Adhan sound URL
-              <input
-                name="adhanSoundUrl"
-                list="adhan-sound-options"
-                defaultValue={data.settings.adhanSoundUrl}
-                placeholder="/audio/adhan/your-file.mp3"
-              />
-            </label>
-            <label>
-              Sponsors template
-              <textarea
-                name="sponsors"
-                rows={3}
-                defaultValue={data.settings.sponsors}
-                placeholder="supported by | gra.png, developed by | stu.png"
-              />
-            </label>
-            <label>
-              Background image URL (jpeg/png/gif)
-              <input
-                name="backgroundImageUrl"
-                defaultValue={data.settings.backgroundImageUrl}
-                placeholder="backgrounds/background.gif or /assets/backgrounds/background.gif"
-              />
-            </label>
-            <button type="submit">Save settings</button>
-          </form>
-        </article>
+            </select>
+            <small>Berbunyi untuk kegiatan yang kolom suara penandanya dikosongkan.</small>
+          </label>
 
-        <article className="admin-card glass-panel span-full">
-          <h2>Media Preview</h2>
-          <div className="media-preview-grid">
-            <div className="media-preview-card">
-              <strong>Boot animation</strong>
-              {bootAnimationUrl ? (
-                <video className="media-preview-video" controls muted playsInline loop src={bootAnimationUrl} />
-              ) : (
-                <p>No boot animation configured yet.</p>
-              )}
-            </div>
-
-            <div className="media-preview-card">
-              <strong>Intro image</strong>
-              {introImageUrl ? (
-                <img src={introImageUrl} alt="Intro preview" className="sponsor-preview-image" />
-              ) : (
-                <p>No intro image configured yet.</p>
-              )}
-            </div>
-
-            <div className="media-preview-card">
-              <strong>Event sound</strong>
-              {eventSoundUrl ? (
-                <audio controls src={eventSoundUrl} />
-              ) : (
-                <p>No event sound configured yet.</p>
-              )}
-            </div>
-
-            <div className="media-preview-card">
-              <strong>Adhan sound</strong>
-              {adhanSoundUrl ? (
-                <audio controls src={adhanSoundUrl} />
-              ) : (
-                <p>No adhan sound configured yet.</p>
-              )}
-            </div>
-
-            <div className="media-preview-card media-preview-card--background">
-              <strong>Background image</strong>
+          <div className="media-grid__strip">
+            <figure>
+              <span>Latar belakang</span>
               {backgroundImageUrl ? (
-                <div className="media-preview-background" style={{ backgroundImage: `url(${backgroundImageUrl})` }} />
+                <img className="shot" src={backgroundImageUrl} alt="Pratinjau latar belakang papan" />
               ) : (
-                <p>No background image configured yet.</p>
+                <div className="shot shot--empty">kosong</div>
               )}
-            </div>
+            </figure>
+            <figure>
+              <span>Suara bawaan</span>
+              {eventSoundUrl ? (
+                <audio controls preload="none" src={eventSoundUrl} />
+              ) : (
+                <div className="shot shot--empty">kosong</div>
+              )}
+            </figure>
           </div>
 
-          <div className="sponsor-preview-section">
-            <div className="panel-heading">
-              <div>
-                <p className="panel-kicker">Sponsors</p>
-                <h2>Parsed preview</h2>
-              </div>
-              <div className="panel-badge">{sponsorEntries.length} items</div>
-            </div>
-
-            {sponsorEntries.length ? (
-              <div className="sponsor-preview-grid">
-                {sponsorEntries.map((entry) => (
-                  <div key={`${entry.label}-${entry.src}`} className="sponsor-preview-card">
-                    <img src={entry.src} alt={entry.label} className="sponsor-preview-image" />
-                    <span>{entry.label}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="fallback-note">No sponsor items configured yet.</p>
-            )}
+          <div className="field-grid__actions">
+            <SubmitButton pendingLabel="Menyimpan">Simpan suara bawaan</SubmitButton>
           </div>
-        </article>
+        </form>
 
-        <article className="admin-card glass-panel">
-          <h2>Events</h2>
-          <form action={uploadEventSound} className="admin-form compact">
-            <label>
-              Upload suara event (mp3/wav/ogg/m4a/aac)
-              <input name="eventSound" type="file" accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/aac" required />
-            </label>
-            <p className="fallback-note">
-              Nama suara akan mengikuti nama file asli. Jika upload ulang dengan nama yang sama, file lama di database akan diganti.
-            </p>
-            <button type="submit">Upload suara ke DB</button>
+        {backgroundImageUrl ? (
+          <form action={clearBackgroundImage} className="field-grid">
+            <input type="hidden" name="page" value={currentPage} />
+            <div className="field-grid__actions">
+              <SubmitButton
+                pendingLabel="Melepas"
+                variant="quiet"
+                confirmMessage="Lepas gambar latar? Papan kembali ke warna gelap bawaan."
+              >
+                Lepas gambar latar
+              </SubmitButton>
+            </div>
           </form>
+        ) : null}
+      </section>
 
-          {data.eventSounds.length ? (
-            <div className="admin-list">
-              {data.eventSounds.map((sound) => (
-                <div key={sound.id} className="admin-list-item">
-                  <div>
-                    <strong>{sound.originalName}</strong>
-                    <p>{sound.soundUrl}</p>
-                  </div>
-                  <audio controls preload="none" src={sound.soundUrl} />
-                </div>
+      <section className="panel" id="kegiatan">
+        <div className="panel__head">
+          <h2>Kegiatan</h2>
+          <p>
+            Satu baris = satu kegiatan pada hari tertentu. Papan menampilkan kegiatan yang sedang berjalan di
+            kotak kiri bawah.
+          </p>
+        </div>
+
+        <form action={createEvent} className="field-grid">
+          <input type="hidden" name="page" value={currentPage} />
+          <label className="field field--span-2">
+            <span>Nama kegiatan</span>
+            <input name="title" placeholder="Kajian Subuh" required />
+          </label>
+
+          <label className="field">
+            <span>Hari</span>
+            <select name="day" defaultValue="senin" required>
+              {WEEK_DAYS.map((day) => (
+                <option key={day.value} value={day.value}>
+                  {day.label}
+                </option>
               ))}
-            </div>
-          ) : (
-            <p className="fallback-note">Belum ada suara event di database.</p>
-          )}
+            </select>
+          </label>
 
-          <form action={createEvent} className="admin-form compact">
-            <label>
-              Title
-              <input name="title" placeholder="Kajian malam" />
-            </label>
-            <label>
-              Day
-              <input name="day" placeholder="senin" />
-            </label>
-            <label>
-              Start
-              <input name="start" placeholder="19:30" />
-            </label>
-            <label>
-              End
-              <input name="end" placeholder="20:30" />
-            </label>
-            <label>
-              Event sound (optional)
-              <select name="soundUrl" defaultValue="">
-                <option value="">Tanpa suara khusus</option>
-                {data.eventSounds.map((sound) => (
-                  <option key={sound.id} value={sound.soundUrl}>
-                    {sound.originalName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p className="fallback-note">Pilih suara dari library upload database di atas.</p>
-            <label>
-              Note
-              <input name="note" placeholder="Ruang utama" />
-            </label>
-            <button type="submit">Add event</button>
-          </form>
+          <label className="field">
+            <span>Mulai</span>
+            <input name="start" type="time" required />
+          </label>
 
-          <form action={importEvents} className="admin-form compact">
-            <label>
-              Import events (JSON / template)
+          <label className="field">
+            <span>Selesai</span>
+            <input name="end" type="time" />
+          </label>
+
+          <label className="field">
+            <span>Suara penanda</span>
+            <select name="soundUrl" defaultValue="">
+              <EventSoundChoices library={data.eventSounds} files={eventSoundFiles} />
+            </select>
+            <small>
+              Bunyi tepat saat kegiatan ini mulai. Kosongkan untuk memakai suara bawaan di bawah.
+            </small>
+          </label>
+
+          <label className="field field--span-2">
+            <span>Catatan</span>
+            <input name="note" placeholder="Ruang serbaguna" />
+          </label>
+
+          <div className="field-grid__actions">
+            <SubmitButton pendingLabel="Menyimpan">Tambah kegiatan</SubmitButton>
+          </div>
+        </form>
+
+        <details className="disclosure">
+          <summary>Impor jadwal dari file atau teks</summary>
+          <form action={importEvents} className="field-grid">
+            <input type="hidden" name="page" value={currentPage} />
+            <label className="field field--wide">
+              <span>Isian impor</span>
               <textarea
                 name="eventsJson"
-                rows={8}
-                placeholder={`[senin]
-03:00-04:00 tahajjud
-04:00-05:00 shubuh
+                rows={9}
+                defaultValue={`[senin]
+05:15-06:00 Kajian Subuh
 
-[selasa]
-03:00-04:00 tahajjud
-04:00-05:00 shubuh
-
-atau JSON biasa / path file: jadwal.json
-contoh JSON:
-{"title":"KBM 1","start":"07:30","end":"08:15","day":"senin","soundUrl":"/audio/events/kbm1.mp3"}`}
+[rabu]
+19:30-20:45 Tahsin Remaja`}
               />
+              <small>
+                Cara template: baris <code>[hari]</code> mulai blok baru, lalu{' '}
+                <code>05:15-06:00 Nama kegiatan</code>. Cara JSON: tempel isi file, atau tulis nama file yang
+                ada di folder assets, misalnya <code>jadwal.json</code>.
+              </small>
             </label>
-            <button type="submit">Import events</button>
+            <div className="field-grid__actions">
+              <SubmitButton pendingLabel="Mengimpor" variant="quiet">
+                Impor jadwal
+              </SubmitButton>
+            </div>
           </form>
+        </details>
 
-          <div className="admin-list">
-            {paginatedEvents.map((event) => (
-              <div key={event.id} className="admin-list-item">
-                <div className="admin-list-item__head">
-                  <div>
+        {pageEvents.length ? (
+          <ul className="rows">
+            {pageEvents.map((event) => (
+              <li key={event.id} className="row">
+                <div className="row__body">
+                  <div className="row__title">
+                    <span className="row__day">{dayLabel(event.day)}</span>
                     <strong>{event.title}</strong>
-                    <p>
-                      {event.day} - {event.start}
-                      {event.endTime ? ` - ${event.endTime}` : ''}
-                    </p>
-                    {event.soundUrl ? <p>sound: {eventSoundNameByUrl.get(event.soundUrl) || event.soundUrl}</p> : null}
-                    {event.note ? <p>note: {event.note}</p> : null}
                   </div>
-
-                  <div className="admin-list-item__actions">
-                    <details className="admin-edit-details">
-                      <summary className="admin-edit-summary">Edit</summary>
-                      <form action={updateEvent} className="admin-form compact admin-inline-edit-form">
-                        <input type="hidden" name="id" value={event.id} />
-                        <label>
-                          Title
-                          <input name="title" defaultValue={event.title} />
-                        </label>
-                        <label>
-                          Day
-                          <input name="day" defaultValue={event.day} />
-                        </label>
-                        <label>
-                          Start
-                          <input name="start" defaultValue={event.start} />
-                        </label>
-                        <label>
-                          End
-                          <input name="end" defaultValue={event.endTime || ''} />
-                        </label>
-                        <label>
-                          Event sound (optional)
-                          <select name="soundUrl" defaultValue={event.soundUrl || ''}>
-                            <option value="">Tanpa suara khusus</option>
-                            {data.eventSounds.map((sound) => (
-                              <option key={sound.id} value={sound.soundUrl}>
-                                {sound.originalName}
-                              </option>
-                            ))}
-                            {event.soundUrl && !eventSoundNameByUrl.has(event.soundUrl) ? (
-                              <option value={event.soundUrl}>{`Legacy: ${event.soundUrl}`}</option>
-                            ) : null}
-                          </select>
-                        </label>
-                        <label>
-                          Note
-                          <input name="note" defaultValue={event.note || ''} />
-                        </label>
-                        <button type="submit">Save edit</button>
-                      </form>
-                    </details>
-
-                    <form action={deleteEvent}>
-                      <input type="hidden" name="id" value={event.id} />
-                      <button type="submit" className="danger">
-                        Delete
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {data.events.length > EVENTS_PER_PAGE ? (
-            <nav className="admin-pagination" aria-label="Event pagination">
-              <a
-                href={`/admin?page=${Math.max(1, currentEventPage - 1)}`}
-                className={`admin-pagination__link ${currentEventPage <= 1 ? 'is-disabled' : ''}`}
-                aria-disabled={currentEventPage <= 1}
-              >
-                Prev
-              </a>
-              <span className="admin-pagination__meta">
-                Page {currentEventPage} / {totalEventPages}
-              </span>
-              <a
-                href={`/admin?page=${Math.min(totalEventPages, currentEventPage + 1)}`}
-                className={`admin-pagination__link ${currentEventPage >= totalEventPages ? 'is-disabled' : ''}`}
-                aria-disabled={currentEventPage >= totalEventPages}
-              >
-                Next
-              </a>
-            </nav>
-          ) : null}
-        </article>
-
-        <article className="admin-card glass-panel">
-          <h2>Mufrodat</h2>
-          <form action={createMufrodat} className="admin-form compact">
-            <label>
-              Arabic
-              <input name="arabic" placeholder="Masjid" />
-            </label>
-            <label>
-              Translation
-              <input name="translation" placeholder="Mosque" />
-            </label>
-            <button type="submit">Add mufrodat</button>
-          </form>
-
-          <div className="admin-list">
-            {data.mufrodat.map((item) => (
-              <div key={item.id} className="admin-list-item">
-                <div>
-                  <strong>{item.arabic}</strong>
-                  <p>{item.translation}</p>
-                </div>
-                <form action={deleteMufrodat}>
-                  <input type="hidden" name="id" value={item.id} />
-                  <button type="submit" className="danger">
-                    Delete
-                  </button>
-                </form>
-              </div>
-            ))}
-          </div>
-        </article>
-
-        <article className="admin-card glass-panel">
-          <h2>Vocabulary Takeover</h2>
-          <div className="admin-list">
-            <div className="admin-list-item">
-              <div>
-                <strong>{data.vocabItems.length} kartu • {data.vocabSlots.filter((slot) => slot.enabled).length} slot aktif</strong>
-                {data.vocabSlots.map((slot) => (
-                  <p key={slot.id}>
-                    {slot.title}: {slot.days} {slot.start}–{slot.end} ({slot.mode}{slot.enabled ? '' : ', nonaktif'})
+                  <p className="row__meta">
+                    {event.start}
+                    {event.endTime ? ` sampai ${event.endTime}` : ''}
+                    {event.soundUrl ? ` | suara ${eventSoundNameByUrl.get(event.soundUrl) || fileNameOf(event.soundUrl)}` : ''}
+                    {event.note ? ` | ${event.note}` : ''}
                   </p>
-                ))}
-              </div>
-            </div>
-          </div>
-          <p className="fallback-note">
-            Kelola kartu, jadwal multi-hari, dan kendali manual di halaman khusus.
-          </p>
-          <a className="admin-pagination__link" href="/control/vocab">Buka Vocab Control</a>
-        </article>
+                </div>
 
-        <article className="admin-card glass-panel">
-          <h2>Mufrodat Video</h2>
-          {notice ? (
-            <p className={`fallback-note ${notice.tone === 'ok' ? 'notice-ok' : 'danger-note'}`}>
-              {notice.text}
-            </p>
-          ) : null}
-          <form action="/api/mufrodat-video/upload-legacy" method="post" className="admin-form compact" encType="multipart/form-data">
-            <label>
-              Manual playback (legacy) (mp4/webm)
-              <input name="mufrodatVideo" type="file" accept="video/mp4,video/webm" required />
-            </label>
-            <p className="fallback-note">
-              Upload akan langsung memutar fullscreen satu kali. Setelah selesai/gagal diputar, state playback dibersihkan dari database.
-            </p>
-            <button type="submit">Upload & trigger playback</button>
-          </form>
+                <div className="row__actions">
+                  <details className="disclosure disclosure--inline">
+                    <summary>Ubah</summary>
+                    <form action={updateEvent} className="field-grid">
+                      <input type="hidden" name="page" value={currentPage} />
+                      <input type="hidden" name="id" value={event.id} />
+                      <label className="field field--span-2">
+                        <span>Nama kegiatan</span>
+                        <input name="title" defaultValue={event.title} required />
+                      </label>
+                      <label className="field">
+                        <span>Hari</span>
+                        <select name="day" defaultValue={event.day} required>
+                          {WEEK_DAYS.map((day) => (
+                            <option key={day.value} value={day.value}>
+                              {day.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Mulai</span>
+                        <input name="start" type="time" defaultValue={event.start} required />
+                      </label>
+                      <label className="field">
+                        <span>Selesai</span>
+                        <input name="end" type="time" defaultValue={event.endTime || ''} />
+                      </label>
+                      <label className="field">
+                        <span>Suara penanda</span>
+                        <select
+                          name="soundUrl"
+                          defaultValue={normalizeSoundValue(event.soundUrl)}
+                        >
+                          <EventSoundChoices
+                            library={data.eventSounds}
+                            files={eventSoundFiles}
+                            current={event.soundUrl}
+                          />
+                        </select>
+                      </label>
+                      <label className="field field--span-2">
+                        <span>Catatan</span>
+                        <input name="note" defaultValue={event.note || ''} />
+                      </label>
+                      <div className="field-grid__actions">
+                        <SubmitButton pendingLabel="Menyimpan">Simpan perubahan</SubmitButton>
+                      </div>
+                    </form>
+                  </details>
 
-          <div className="admin-list">
-            <div className="admin-list-item">
-              <div>
-                <strong>Video aktif (manual/schedule)</strong>
-                <p>{mufrodatActiveVideoUrl || 'Belum ada video aktif'}</p>
-                {data.settings.mufrodatVideoPlaybackNonce ? <p>nonce: {data.settings.mufrodatVideoPlaybackNonce}</p> : null}
-              </div>
-            </div>
-          </div>
-
-          <form action={stopMufrodatVideoPlayback} className="admin-form compact">
-            <p className="fallback-note">Klik jika perlu menghentikan video yang sedang tampil sekarang.</p>
-            <button type="submit" className="danger">
-              Stop video sekarang
-            </button>
-          </form>
-
-          <form action={saveMufrodatVideoSettings} className="admin-form compact">
-            <label>
-              Playback mode
-              <select name="playbackMode" defaultValue={mufrodatPlaybackMode}>
-                <option value="sequential">Urut playlist</option>
-                <option value="random">Random</option>
-              </select>
-            </label>
-            <label>
-              Jam tayang (satu slot satu video)
-              <textarea
-                name="scheduleTimes"
-                rows={5}
-                defaultValue={mufrodatScheduleValue}
-                placeholder={`09:00\n12:00\n15:30`}
-              />
-            </label>
-            <p className="fallback-note">
-              Format `HH:MM` (zona waktu Asia/Jakarta). Pada tiap jam slot, sistem memutar tepat 1 video dari playlist.
-            </p>
-            <button type="submit">Save schedule & mode</button>
-          </form>
-
-          <form action={uploadMufrodatVideoToPlaylist} className="admin-form compact">
-            <label>
-              Upload video mufrodat (mp4/webm)
-              <input name="mufrodatVideo" type="file" accept="video/mp4,video/webm" required />
-            </label>
-            <p className="fallback-note">
-              Video upload akan ditambahkan ke playlist database. Urutan playlist mengikuti urutan upload.
-            </p>
-            <button type="submit">Upload ke playlist</button>
-          </form>
-
-          {data.mufrodatVideos.length ? (
-            <div className="admin-list">
-              {data.mufrodatVideos.map((video) => (
-                <div key={video.id} className="admin-list-item">
-                  <div>
-                    <strong>{video.originalName}</strong>
-                    <p>{video.videoUrl}</p>
-                    <p>{(video.sizeBytes / (1024 * 1024)).toFixed(2)} MB</p>
-                  </div>
-                  <video className="media-preview-video" controls muted playsInline preload="metadata" src={video.videoUrl} />
-                  <form action={deleteMufrodatVideo}>
-                    <input type="hidden" name="id" value={video.id} />
-                    <button type="submit" className="danger">
-                      Delete
-                    </button>
+                  <form action={deleteEvent}>
+                    <input type="hidden" name="page" value={currentPage} />
+                    <input type="hidden" name="id" value={event.id} />
+                    <SubmitButton
+                      pendingLabel="Menghapus"
+                      confirmMessage={`Hapus kegiatan "${event.title}"? Baris ini hilang dari papan.`}
+                      variant="danger"
+                    >
+                      Hapus
+                    </SubmitButton>
                   </form>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="admin-list">
-              <div className="admin-list-item">
-                <div>
-                  <strong>Playlist kosong</strong>
-                  <p>Upload video dulu agar jadwal mufrodat bisa berjalan.</p>
-                </div>
-              </div>
-            </div>
-          )}
-        </article>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="empty">
+            Belum ada kegiatan sama sekali. Isi form di atas untuk menambah yang pertama.
+          </p>
+        )}
 
-        <article className="admin-card glass-panel">
-          <h2>Live Announcement</h2>
-          <AdminAnnouncementControl authToken={announcementAdminToken} />
-        </article>
-
-        <article className="admin-card glass-panel span-full">
-          <h2>Ticker</h2>
-          <form action={saveTicker} className="admin-form">
-            <label>
-              Ticker lines
-              <textarea name="items" rows={6} defaultValue={[...data.ticker, data.settings.runningText].join('\n')} />
-            </label>
-            <button type="submit">Save ticker</button>
-          </form>
-        </article>
+        {totalEventPages > 1 ? (
+          <nav className="pager" aria-label="Halaman kegiatan">
+            {currentPage > 1 ? (
+              <a className="btn btn--quiet" href={`/admin?page=${currentPage - 1}#kegiatan`}>
+                Sebelumnya
+              </a>
+            ) : (
+              <span className="btn btn--quiet is-off" aria-hidden="true">
+                Sebelumnya
+              </span>
+            )}
+            <span className="pager__meta">
+              Halaman {currentPage} dari {totalEventPages}
+            </span>
+            {currentPage < totalEventPages ? (
+              <a className="btn btn--quiet" href={`/admin?page=${currentPage + 1}#kegiatan`}>
+                Berikutnya
+              </a>
+            ) : (
+              <span className="btn btn--quiet is-off" aria-hidden="true">
+                Berikutnya
+              </span>
+            )}
+          </nav>
+        ) : null}
       </section>
 
-      <datalist id="event-sound-options">
-        {allEventSoundOptions.map((src) => (
-          <option key={src} value={src} />
-        ))}
-      </datalist>
-      <datalist id="adhan-sound-options">
-        {adhanSoundOptions.map((src) => (
-          <option key={src} value={src} />
-        ))}
-      </datalist>
+      <section className="panel" id="suara">
+        <div className="panel__head">
+          <h2>Perpustakaan suara</h2>
+          <p>
+            Satu tempat untuk semua file audio pendek. Pilih dari daftar ini saat mengisi kolom Suara pada
+            kegiatan dan kartu kosakata.
+          </p>
+        </div>
+
+        <form action={uploadEventSound} className="field-grid">
+          <input type="hidden" name="page" value={currentPage} />
+          <label className="field field--wide">
+            <span>Unggah file audio</span>
+            <input
+              name="eventSound"
+              type="file"
+              accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/aac"
+              required
+            />
+            <small>mp3, wav, ogg, m4a, atau aac, maksimal 20 MB. Mengunggah lagi dengan nama sama akan menimpa.</small>
+          </label>
+          <div className="field-grid__actions">
+            <SubmitButton pendingLabel="Mengunggah">Unggah suara</SubmitButton>
+          </div>
+        </form>
+
+        {data.eventSounds.length ? (
+          <ul className="rows">
+            {data.eventSounds.map((sound) => (
+              <li key={sound.id} className="row">
+                <div className="row__body">
+                  <div className="row__title">
+                    <strong>{sound.originalName}</strong>
+                  </div>
+                  <p className="row__meta">{formatBytes(sound.sizeBytes)}</p>
+                </div>
+                <audio controls preload="none" src={sound.soundUrl} />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="empty">
+            Belum ada suara di perpustakaan. Unggah satu file mp3 di atas, lalu pilih di kolom Suara pada
+            kegiatan.
+          </p>
+        )}
+      </section>
+
+      <section className="panel" id="mufrodat">
+        <div className="panel__head">
+          <h2>Mufrodat</h2>
+          <p>Daftar kata Arab yang bergantian di kotak kanan bawah papan.</p>
+        </div>
+
+        <form action={createMufrodat} className="field-grid">
+          <input type="hidden" name="page" value={currentPage} />
+          <label className="field">
+            <span>Teks Arab</span>
+            <input name="arabic" dir="rtl" placeholder="مسجد" required />
+          </label>
+          <label className="field">
+            <span>Arti</span>
+            <input name="translation" placeholder="Masjid" required />
+          </label>
+          <div className="field-grid__actions">
+            <SubmitButton pendingLabel="Menyimpan">Tambah mufrodat</SubmitButton>
+          </div>
+        </form>
+
+        {data.mufrodat.length ? (
+          <ul className="rows">
+            {data.mufrodat.map((item) => (
+              <li key={item.id} className="row">
+                <div className="row__body">
+                  <div className="row__title">
+                    <strong className="arabic" dir="rtl">
+                      {item.arabic}
+                    </strong>
+                    <span>{item.translation}</span>
+                  </div>
+                </div>
+                <form action={deleteMufrodat}>
+                  <input type="hidden" name="page" value={currentPage} />
+                  <input type="hidden" name="id" value={item.id} />
+                  <SubmitButton
+                    pendingLabel="Menghapus"
+                    confirmMessage={`Hapus mufrodat "${item.translation}"?`}
+                    variant="danger"
+                  >
+                    Hapus
+                  </SubmitButton>
+                </form>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="empty">Belum ada mufrodat. Tambah satu lewat form di atas.</p>
+        )}
+      </section>
+
+      <section className="panel" id="video">
+        <div className="panel__head">
+          <h2>Video mufrodat</h2>
+          <p>Video pendek yang mengambil alih layar penuh saat jadwalnya tiba.</p>
+        </div>
+
+        <div className="status-line" data-live={activeVideoUrl ? 'true' : undefined}>
+          <span className="status-line__label">Yang tampil sekarang</span>
+          {activeVideoUrl ? (
+            <span className="status-line__value">
+              {fileNameOf(activeVideoUrl)} (diminta{' '}
+              {formatClock(data.settings.mufrodatVideoPlaybackRequestedAt || null)})
+            </span>
+          ) : (
+            <span className="status-line__value">Tidak ada video aktif.</span>
+          )}
+          {activeVideoUrl ? (
+            <form action={stopMufrodatVideoPlayback}>
+              <input type="hidden" name="page" value={currentPage} />
+              <SubmitButton pendingLabel="Menghentikan" variant="danger">
+                Hentikan sekarang
+              </SubmitButton>
+            </form>
+          ) : null}
+        </div>
+
+        <form action={saveMufrodatVideoSettings} className="field-grid">
+          <input type="hidden" name="page" value={currentPage} />
+          <label className="field">
+            <span>Urutan tayang</span>
+            <select name="playbackMode" defaultValue={playbackMode}>
+              <option value="sequential">Ikuti urutan playlist</option>
+              <option value="random">Acak</option>
+            </select>
+          </label>
+
+          <label className="field field--wide">
+            <span>Jam tayang</span>
+            <textarea name="scheduleTimes" rows={4} defaultValue={scheduleValue} placeholder={'09:00\n12:00\n15:30'} />
+            <small>
+              Satu jam per baris, zona waktu Asia/Jakarta. Tiap jam yang kena akan memutar tepat satu video dari
+              playlist, lalu mengunci slot itu sampai lewat.
+            </small>
+          </label>
+
+          <div className="field-grid__actions">
+            <SubmitButton pendingLabel="Menyimpan">Simpan jadwal tayang</SubmitButton>
+          </div>
+        </form>
+
+        <div className="two-up">
+          <form action={uploadMufrodatVideoToPlaylist} className="field-grid">
+            <input type="hidden" name="page" value={currentPage} />
+            <h3 className="field-set-title">Tambah ke playlist</h3>
+            <label className="field">
+              <span>File video</span>
+              <input name="mufrodatVideo" type="file" accept="video/mp4,video/webm" required />
+              <small>mp4 atau webm, maksimal 100 MB. Urutan playlist mengikuti urutan unggah.</small>
+            </label>
+            <div className="field-grid__actions">
+              <SubmitButton pendingLabel="Mengunggah">Tambah ke playlist</SubmitButton>
+            </div>
+          </form>
+
+          <form action={playMufrodatVideoOnce} className="field-grid">
+            <input type="hidden" name="page" value={currentPage} />
+            <h3 className="field-set-title">Putar sekali, di luar jadwal</h3>
+            <label className="field">
+              <span>File video</span>
+              <input name="mufrodatVideo" type="file" accept="video/mp4,video/webm" required />
+              <small>Video ini langsung memutar penuh sekali, lalu papan kembali normal. Tidak masuk playlist.</small>
+            </label>
+            <div className="field-grid__actions">
+              <SubmitButton pendingLabel="Mengunggah" variant="quiet">
+                Unggah lalu putar sekali
+              </SubmitButton>
+            </div>
+          </form>
+        </div>
+
+        {data.mufrodatVideos.length ? (
+          <ul className="rows">
+            {data.mufrodatVideos.map((video, index) => (
+              <li key={video.id} className="row">
+                <div className="row__body">
+                  <div className="row__title">
+                    <span className="row__day">{index + 1}</span>
+                    <strong>{video.originalName}</strong>
+                  </div>
+                  <p className="row__meta">{formatBytes(video.sizeBytes)}</p>
+                </div>
+                <video className="row__video" controls muted playsInline preload="metadata" src={video.videoUrl} />
+                <form action={deleteMufrodatVideo}>
+                  <input type="hidden" name="page" value={currentPage} />
+                  <input type="hidden" name="id" value={video.id} />
+                  <SubmitButton
+                    pendingLabel="Menghapus"
+                    confirmMessage={`Hapus video "${video.originalName}"? File di disk ikut terhapus.`}
+                    variant="danger"
+                  >
+                    Hapus
+                  </SubmitButton>
+                </form>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="empty">
+            Playlist masih kosong. Unggah video lewat kolom Tambah ke playlist supaya jadwal di atas punya
+            bahan tayang.
+          </p>
+        )}
+      </section>
+
+      <section className="panel" id="kosakata">
+        <div className="panel__head">
+          <h2>Kosakata (halaman sendiri)</h2>
+          <p>
+            Bagian ini hanya ringkasan. Kartu dan slot jadwal dikelola di halaman sendiri, karena isinya jauh
+            lebih banyak daripada bagian lain di halaman ini.
+          </p>
+        </div>
+
+        <dl className="console__facts console__facts--inline">
+          <div>
+            <dt>Kartu tersimpan</dt>
+            <dd>{data.vocabItems.length} kartu</dd>
+          </div>
+          <div>
+            <dt>Slot aktif</dt>
+            <dd>
+              {activeVocabSlots.length} dari {data.vocabSlots.length}
+            </dd>
+          </div>
+          <div>
+            <dt>Slot manual</dt>
+            <dd>{manualSlot ? manualSlot.title : 'tidak ada'}</dd>
+          </div>
+        </dl>
+
+        <a className="btn" href="/control/vocab">
+          Kelola kartu dan slot kosakata
+        </a>
+      </section>
+
+      <section className="panel" id="pengumuman">
+        <div className="panel__head">
+          <h2>Pengumuman langsung</h2>
+          <p>Bicara langsung ke speaker papan, tanpa perlu menyiapkan file apa pun.</p>
+        </div>
+
+        <AdminAnnouncementControl authToken={announcementToken} />
+      </section>
+
     </main>
   );
 }

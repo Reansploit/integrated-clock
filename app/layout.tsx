@@ -5,8 +5,8 @@ import { AutoRefresh } from '@/components/AutoRefresh';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Clock2',
-  description: 'Digital mosque display built with Next.js, React, Three.js, and SQLite.',
+  title: 'Papan Wonosalam',
+  description: 'Papan informasi 24 jam di Wonosalam Boarding School.',
 };
 
 export default function RootLayout({

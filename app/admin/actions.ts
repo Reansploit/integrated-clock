@@ -4,32 +4,31 @@ import fs from 'fs/promises';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
+import { unstable_rethrow } from 'next/navigation';
 import { z } from 'zod';
 
 import { ensureDatabase, getDb, upsertSetting } from '@/lib/db';
+import { describeIssues, panelRedirect } from '@/lib/panel-notice';
 
-const settingSchema = z.object({
-  cityName: z.string().min(1).max(80),
-  cityId: z.string().min(1).max(20),
-  theme: z.string().min(1).max(40),
-  runningText: z.string().max(300),
-  enableAdhan: z.enum(['true', 'false']),
-  bootAnimationUrl: z.string().max(500).optional(),
-  introImageUrl: z.string().max(500).optional(),
-  eventSoundUrl: z.string().max(500).optional(),
-  adhanSoundUrl: z.string().max(500).optional(),
-  sponsors: z.string().max(1000).optional(),
-  backgroundImageUrl: z.string().max(500).optional(),
+const WEEK_DAYS = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu'] as const;
+
+const citySchema = z.object({
+  cityName: z.string().min(1, 'nama kota wajib diisi').max(80),
+  cityId: z.string().min(1, 'id kota wajib diisi').max(20),
+});
+
+const displaySchema = z.object({
+  eventSoundUrl: z.string().max(500),
+  backgroundImageUrl: z.string().max(500),
 });
 
 const eventSchema = z.object({
-  title: z.string().min(1).max(120),
-  day: z.string().min(1).max(20),
-  start: z.string().regex(/^\d{2}:\d{2}$/),
-  end: z.string().optional().or(z.literal('')),
-  soundUrl: z.string().max(500).optional().or(z.literal('')),
-  note: z.string().optional().or(z.literal('')),
+  title: z.string().min(1, 'nama kegiatan wajib diisi').max(120),
+  day: z.enum(WEEK_DAYS, { message: 'pilih salah satu hari' }),
+  start: z.string().regex(/^\d{2}:\d{2}$/, 'format jam harus HH:MM'),
+  end: z.string().regex(/^(\d{2}:\d{2})?$/, 'format jam harus HH:MM'),
+  soundUrl: z.string().max(500),
+  note: z.string().max(500),
 });
 
 const importEventSchema = z.object({
@@ -45,8 +44,8 @@ const importEventSchema = z.object({
 });
 
 const mufrodatSchema = z.object({
-  arabic: z.string().min(1).max(120),
-  translation: z.string().min(1).max(160),
+  arabic: z.string().min(1, 'teks Arab wajib diisi').max(120),
+  translation: z.string().min(1, 'arti wajib diisi').max(160),
 });
 
 const mufrodatVideoSettingsSchema = z.object({
@@ -54,12 +53,9 @@ const mufrodatVideoSettingsSchema = z.object({
   scheduleTimes: z.string().max(1000),
 });
 
-const tickerSchema = z.object({
-  items: z.string().min(1).max(2000),
-});
-
 const MAX_EVENT_SOUND_SIZE_BYTES = 20 * 1024 * 1024;
 const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
+const MAX_BACKGROUND_SIZE_BYTES = 10 * 1024 * 1024;
 const allowedEventSoundExtensions = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac']);
 const eventSoundMimeByExtension: Record<string, string> = {
   '.mp3': 'audio/mpeg',
@@ -84,13 +80,95 @@ const videoMimeByExtension: Record<string, string> = {
   '.webm': 'video/webm',
 };
 const allowedVideoMimeTypes = new Set(['video/mp4', 'video/webm']);
+const allowedBackgroundExtensions = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
+const backgroundMimeByExtension: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+};
+const allowedBackgroundMimeTypes = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+
+/**
+ * A rejected upload or a failed validation, kept apart from a crash so the
+ * operator reads the reason instead of a generic failure line.
+ */
+class PanelError extends Error {
+  constructor(
+    readonly notice: string,
+    readonly detail = '',
+  ) {
+    super(detail || notice);
+  }
+}
+
+function back(notice: string, anchor: string, detail = '', formData?: FormData): never {
+  panelRedirect('/admin', notice, { anchor, detail, page: readPageParam(formData) });
+}
 
 function requireDatabase() {
   ensureDatabase();
 }
 
-function redirectToAdminWithNotice(notice: string): never {
-  redirect(`/admin?notice=${encodeURIComponent(notice)}`);
+/**
+ * The event list is paginated but every other section is not, so the current
+ * page rides along in a hidden input on every form. Only values above 1 travel:
+ * page 1 is the default URL and stays clean.
+ */
+function readPageParam(formData?: FormData): number | undefined {
+  if (!formData) {
+    return undefined;
+  }
+  const page = Number.parseInt(String(formData.get('page') ?? '1'), 10);
+  return Number.isFinite(page) && page > 1 ? page : undefined;
+}
+
+/**
+ * Every write funnels through here: run the work, and whether it succeeded or
+ * was rejected, leave for the page with a notice and the section anchor so the
+ * operator lands back where they were typing.
+ *
+ * Callers must `return guard(...)`. Started but not awaited, the work escapes
+ * the action's call stack, the `redirect()` throw lands in a detached promise,
+ * and the page reloads itself with no notice at all.
+ */
+async function guard(
+  anchor: string,
+  success: string,
+  work: () => Promise<string | void> | string | void,
+  formData?: FormData,
+): Promise<never> {
+  let detail = '';
+
+  try {
+    const result = await work();
+    if (typeof result === 'string') {
+      detail = result;
+    }
+  } catch (error) {
+    unstable_rethrow(error);
+    if (error instanceof PanelError) {
+      back(error.notice, anchor, error.detail, formData);
+    }
+    console.error('Aksi panel gagal:', error);
+    back('write-failed', anchor, '', formData);
+  }
+
+  revalidatePath('/');
+  revalidatePath('/admin');
+  back(success, anchor, detail, formData);
+}
+
+function readForm<T extends z.ZodTypeAny>(schema: T, formData: FormData, fields: string[]): z.infer<T> {
+  const values = Object.fromEntries(fields.map((field) => [field, String(formData.get(field) ?? '')]));
+  const result = schema.safeParse(values);
+
+  if (result.success) {
+    return result.data;
+  }
+
+  throw new PanelError('invalid', describeIssues(result.error.issues));
 }
 
 function sanitizeFileName(name: string, fallback = 'file') {
@@ -159,47 +237,116 @@ async function normalizeEventSoundReference(rawValue: string) {
   return value;
 }
 
-export async function clearMufrodatVideoPlayback(playbackNonce: string) {
-  requireDatabase();
-
-  const nonce = playbackNonce.trim();
-  if (!nonce) {
-    return;
+async function acceptEventSoundFile(formData: FormData) {
+  const payload = formData.get('eventSound');
+  if (!(payload instanceof File) || !payload.size) {
+    throw new PanelError('sound-no-file');
+  }
+  if (payload.size > MAX_EVENT_SOUND_SIZE_BYTES) {
+    throw new PanelError('sound-too-large');
   }
 
-  const row = getDb()
-    .prepare("SELECT value FROM settings WHERE key = 'mufrodatVideoPlaybackNonce' LIMIT 1")
-    .get() as { value: string } | undefined;
-
-  const activeNonce = String(row?.value || '').trim();
-  if (!activeNonce || activeNonce !== nonce) {
-    return;
+  const originalName = sanitizeFileName(payload.name || 'suara.mp3', 'suara');
+  const ext = path.extname(originalName).toLowerCase();
+  if (!allowedEventSoundExtensions.has(ext)) {
+    throw new PanelError('sound-type-invalid');
   }
 
-  upsertSetting('mufrodatVideoUrl', '');
-  upsertSetting('mufrodatVideoPlaybackNonce', '');
-  upsertSetting('mufrodatVideoPlaybackRequestedAt', '');
+  const uploadedMime = String(payload.type || '').toLowerCase();
+  const resolvedMime =
+    uploadedMime && allowedEventSoundMimeTypes.has(uploadedMime)
+      ? uploadedMime
+      : eventSoundMimeByExtension[ext] || 'application/octet-stream';
+  if (!resolvedMime.startsWith('audio/')) {
+    throw new PanelError('sound-type-invalid');
+  }
 
-  revalidatePath('/');
-  revalidatePath('/admin');
+  return { originalName, ext, resolvedMime, buffer: Buffer.from(await payload.arrayBuffer()) };
 }
 
-export async function stopMufrodatVideoPlayback() {
-  requireDatabase();
+async function acceptVideoFile(formData: FormData) {
+  const payload = formData.get('mufrodatVideo');
+  if (!(payload instanceof File) || !payload.size) {
+    throw new PanelError('video-no-file');
+  }
+  if (payload.size > MAX_VIDEO_SIZE_BYTES) {
+    throw new PanelError('video-too-large');
+  }
 
-  upsertSetting('mufrodatVideoUrl', '');
-  upsertSetting('mufrodatVideoPlaybackNonce', '');
-  upsertSetting('mufrodatVideoPlaybackRequestedAt', '');
+  const originalName = sanitizeFileName(payload.name || 'video.mp4', 'video');
+  const ext = path.extname(originalName).toLowerCase();
+  if (!allowedVideoExtensions.has(ext)) {
+    throw new PanelError('video-type-invalid');
+  }
 
-  revalidatePath('/');
-  revalidatePath('/admin');
+  const mime = String(payload.type || '').toLowerCase();
+  const resolvedMime =
+    mime && allowedVideoMimeTypes.has(mime) ? mime : videoMimeByExtension[ext] || 'video/mp4';
+
+  return { originalName, ext, resolvedMime, buffer: Buffer.from(await payload.arrayBuffer()) };
+}
+
+async function acceptBackgroundFile(formData: FormData) {
+  const payload = formData.get('backgroundImage');
+  if (!(payload instanceof File) || !payload.size) {
+    throw new PanelError('background-no-file');
+  }
+  if (payload.size > MAX_BACKGROUND_SIZE_BYTES) {
+    throw new PanelError('background-too-large');
+  }
+
+  const originalName = sanitizeFileName(payload.name || 'latar.png', 'latar');
+  const ext = path.extname(originalName).toLowerCase();
+  if (!allowedBackgroundExtensions.has(ext)) {
+    throw new PanelError('background-type-invalid');
+  }
+
+  const mime = String(payload.type || '').toLowerCase();
+  const resolvedMime =
+    mime && allowedBackgroundMimeTypes.has(mime) ? mime : backgroundMimeByExtension[ext] || 'image/png';
+
+  return { originalName, ext, resolvedMime, buffer: Buffer.from(await payload.arrayBuffer()) };
+}
+
+async function writeBackgroundFile(buffer: Buffer, ext: string) {
+  const fileName = `${Date.now()}-${randomUUID()}${ext}`;
+  const relativePath = path.posix.join('backgrounds', fileName);
+  const destinationDir = path.join(process.cwd(), 'assets', 'backgrounds');
+
+  try {
+    await fs.mkdir(destinationDir, { recursive: true });
+    await fs.writeFile(path.join(destinationDir, fileName), buffer);
+  } catch (error) {
+    console.error('Gagal menulis file gambar latar:', error);
+    throw new PanelError('background-write-failed');
+  }
+
+  return relativePath;
+}
+
+async function writeVideoFile(buffer: Buffer, ext: string) {
+  const fileName = `${Date.now()}-${randomUUID()}${ext}`;
+  const relativePath = path.posix.join('videos', 'mufrodat', fileName);
+  const destinationDir = path.join(process.cwd(), 'assets', 'videos', 'mufrodat');
+
+  try {
+    await fs.mkdir(destinationDir, { recursive: true });
+    await fs.writeFile(path.join(destinationDir, fileName), buffer);
+  } catch (error) {
+    console.error('Gagal menulis file video:', error);
+    throw new PanelError('video-write-failed');
+  }
+
+  return relativePath;
 }
 
 function getJakartaDay() {
   return new Intl.DateTimeFormat('id-ID', {
     weekday: 'long',
     timeZone: 'Asia/Jakarta',
-  }).format(new Date()).toLowerCase();
+  })
+    .format(new Date())
+    .toLowerCase();
 }
 
 function normalizeImportDay(day: string, fallback: string) {
@@ -227,25 +374,6 @@ function normalizeImportDay(day: string, fallback: string) {
   };
 
   return dayMap[normalized] ?? fallback;
-}
-
-function normalizeImportTime(value: string) {
-  const compact = value.trim().replace('.', ':');
-  const parts = compact.split(':');
-  if (parts.length !== 2) {
-    return '';
-  }
-
-  const hour = Number(parts[0]);
-  const minute = Number(parts[1]);
-  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
-    return '';
-  }
-  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-    return '';
-  }
-
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
 function parseBracketScheduleTemplate(raw: string, fallbackDay: string) {
@@ -289,6 +417,10 @@ function parseBracketScheduleTemplate(raw: string, fallbackDay: string) {
   return results;
 }
 
+function normalizeImportTime(value: string) {
+  return normalizeClockTime(value);
+}
+
 async function resolveImportPayload(raw: string) {
   let text = raw.trim();
   const fenced = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
@@ -318,439 +450,372 @@ async function resolveImportPayload(raw: string) {
   }
 }
 
-export async function saveSettings(formData: FormData) {
+/** Called by the display itself once a one-off video has finished. Not a panel action. */
+export async function clearMufrodatVideoPlayback(playbackNonce: string) {
   requireDatabase();
 
-  const values = settingSchema.parse({
-    cityName: String(formData.get('cityName') || ''),
-    cityId: String(formData.get('cityId') || ''),
-    theme: String(formData.get('theme') || ''),
-    runningText: String(formData.get('runningText') || ''),
-    enableAdhan: String(formData.get('enableAdhan') || 'false'),
-    bootAnimationUrl: String(formData.get('bootAnimationUrl') || ''),
-    introImageUrl: String(formData.get('introImageUrl') || ''),
-    eventSoundUrl: String(formData.get('eventSoundUrl') || ''),
-    adhanSoundUrl: String(formData.get('adhanSoundUrl') || ''),
-    sponsors: String(formData.get('sponsors') || ''),
-    backgroundImageUrl: String(formData.get('backgroundImageUrl') || ''),
-  });
-
-  const sql = getDb();
-  for (const [key, value] of Object.entries(values)) {
-    sql
-      .prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
-      .run(key, String(value));
+  const nonce = playbackNonce.trim();
+  if (!nonce) {
+    return;
   }
+
+  const row = getDb()
+    .prepare("SELECT value FROM settings WHERE key = 'mufrodatVideoPlaybackNonce' LIMIT 1")
+    .get() as { value: string } | undefined;
+
+  const activeNonce = String(row?.value || '').trim();
+  if (!activeNonce || activeNonce !== nonce) {
+    return;
+  }
+
+  upsertSetting('mufrodatVideoUrl', '');
+  upsertSetting('mufrodatVideoPlaybackNonce', '');
+  upsertSetting('mufrodatVideoPlaybackRequestedAt', '');
 
   revalidatePath('/');
   revalidatePath('/admin');
 }
 
-export async function uploadEventSound(formData: FormData) {
-  requireDatabase();
+export async function saveCitySettings(formData: FormData) {
+  return guard('sholat', 'settings-saved', () => {
+    requireDatabase();
 
-  const payload = formData.get('eventSound');
-  if (!(payload instanceof File)) {
-    console.warn('Upload suara event gagal: file tidak valid.');
-    revalidatePath('/admin');
-    return;
-  }
-
-  if (!payload.size || payload.size > MAX_EVENT_SOUND_SIZE_BYTES) {
-    console.warn('Upload suara event gagal: ukuran file tidak valid atau melebihi 20MB.');
-    revalidatePath('/admin');
-    return;
-  }
-
-  const originalName = sanitizeFileName(payload.name || 'event-sound.mp3', 'event-sound');
-  const ext = path.extname(originalName).toLowerCase();
-  if (!allowedEventSoundExtensions.has(ext)) {
-    console.warn('Upload suara event gagal: ekstensi file tidak didukung.');
-    revalidatePath('/admin');
-    return;
-  }
-
-  const uploadedMime = String(payload.type || '').toLowerCase();
-  const fallbackMime = eventSoundMimeByExtension[ext] || 'application/octet-stream';
-  const resolvedMime = uploadedMime && allowedEventSoundMimeTypes.has(uploadedMime) ? uploadedMime : fallbackMime;
-  if (!resolvedMime.startsWith('audio/')) {
-    console.warn('Upload suara event gagal: MIME type tidak didukung.');
-    revalidatePath('/admin');
-    return;
-  }
-
-  const buffer = Buffer.from(await payload.arrayBuffer());
-  getDb()
-    .prepare(
-      `INSERT INTO event_sounds (original_name, mime_type, file_ext, size_bytes, audio_data)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(original_name) DO UPDATE SET
-         mime_type = excluded.mime_type,
-         file_ext = excluded.file_ext,
-         size_bytes = excluded.size_bytes,
-         audio_data = excluded.audio_data,
-         updated_at = datetime('now')`,
-    )
-    .run(originalName, resolvedMime, ext, buffer.length, buffer);
-
-  revalidatePath('/');
-  revalidatePath('/admin');
+    const values = readForm(citySchema, formData, ['cityName', 'cityId']);
+    writeSettings(values);
+  }, formData);
 }
 
-export async function createEvent(formData: FormData) {
-  requireDatabase();
+export async function saveDisplaySettings(formData: FormData) {
+  return guard('layar', 'settings-saved', () => {
+    requireDatabase();
 
-  const values = eventSchema.parse({
-    title: String(formData.get('title') || ''),
-    day: String(formData.get('day') || ''),
-    start: String(formData.get('start') || ''),
-    end: String(formData.get('end') || ''),
-    soundUrl: String(formData.get('soundUrl') || ''),
-    note: String(formData.get('note') || ''),
-  });
-  const normalizedSoundUrl = await normalizeEventSoundReference(values.soundUrl || '');
-
-  getDb()
-    .prepare('INSERT INTO events (title, day, start, end_time, sound_url, note) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(values.title, values.day, values.start, values.end || null, normalizedSoundUrl || null, values.note || null);
-
-  revalidatePath('/');
-  revalidatePath('/admin');
+    const values = readForm(displaySchema, formData, ['eventSoundUrl', 'backgroundImageUrl']);
+    writeSettings(values);
+  }, formData);
 }
 
-export async function deleteEvent(formData: FormData) {
-  requireDatabase();
+export async function clearBackgroundImage(formData: FormData) {
+  return guard('layar', 'background-cleared', () => {
+    requireDatabase();
 
-  const id = Number(formData.get('id'));
-  if (!Number.isFinite(id)) return;
-
-  getDb().prepare('DELETE FROM events WHERE id = ?').run(id);
-
-  revalidatePath('/');
-  revalidatePath('/admin');
+    upsertSetting('backgroundImageUrl', '');
+  }, formData);
 }
 
-export async function updateEvent(formData: FormData) {
-  requireDatabase();
-
-  const id = Number(formData.get('id'));
-  if (!Number.isFinite(id)) return;
-
-  const values = eventSchema.parse({
-    title: String(formData.get('title') || ''),
-    day: String(formData.get('day') || ''),
-    start: String(formData.get('start') || ''),
-    end: String(formData.get('end') || ''),
-    soundUrl: String(formData.get('soundUrl') || ''),
-    note: String(formData.get('note') || ''),
-  });
-  const normalizedSoundUrl = await normalizeEventSoundReference(values.soundUrl || '');
-
-  getDb()
-    .prepare(
-      `UPDATE events SET title = ?, day = ?, start = ?, end_time = ?, sound_url = ?, note = ?, updated_at = datetime('now') WHERE id = ?`,
-    )
-    .run(values.title, values.day, values.start, values.end || null, normalizedSoundUrl || null, values.note || null, id);
-
-  revalidatePath('/');
-  revalidatePath('/admin');
-}
-
-export async function importEvents(formData: FormData) {
-  requireDatabase();
-
-  const raw = String(formData.get('eventsJson') || '').trim();
-  if (!raw) return;
-
-  const rawPayload = await resolveImportPayload(raw);
-  const defaultDay = getJakartaDay();
-
-  const normalizeJsonText = (value: string) =>
-    value
-      .replace(/[“”]/g, '"')
-      .replace(/[‘’]/g, "'")
-      .replace(/,\s*([}\]])/g, '$1');
-
-  const toPayload = (value: unknown): unknown[] =>
-    Array.isArray(value)
-      ? value
-      : value && typeof value === 'object'
-        ? (() => {
-            const objectPayload = value as {
-              events?: unknown[];
-              data?: unknown[];
-              items?: unknown[];
-              jadwal?: unknown[];
-            };
-            return objectPayload.events || objectPayload.data || objectPayload.items || objectPayload.jadwal || [value];
-          })()
-        : [value];
-
-  let payload: unknown[] = [];
-  let parsedJson = false;
-
-  try {
-    payload = toPayload(JSON.parse(rawPayload));
-    parsedJson = true;
-  } catch {
-    try {
-      payload = toPayload(JSON.parse(normalizeJsonText(rawPayload)));
-      parsedJson = true;
-    } catch {
-      payload = parseBracketScheduleTemplate(rawPayload, defaultDay);
-    }
-  }
-
-  if (!payload.length) {
-    console.warn('Import events skipped: no readable rows found.');
-    revalidatePath('/admin');
-    return;
-  }
-
+function writeSettings(values: Record<string, string>) {
   const db = getDb();
-  const insert = db.prepare('INSERT INTO events (title, day, start, end_time, sound_url, note) VALUES (?, ?, ?, ?, ?, NULL)');
-  let inserted = 0;
-
-  for (const rawEntry of payload) {
-    const parsedEntry = parsedJson
-      ? importEventSchema.safeParse(rawEntry)
-      : importEventSchema.safeParse({
-          title: (rawEntry as { title?: string }).title,
-          start: (rawEntry as { start?: string }).start,
-          end: (rawEntry as { end?: string }).end,
-          day: (rawEntry as { day?: string }).day,
-          soundUrl: (rawEntry as { soundUrl?: string }).soundUrl,
-        });
-
-    if (!parsedEntry.success) {
-      continue;
-    }
-
-    const entry = parsedEntry.data;
-    const title = String(entry.title || entry.tittle || '').trim();
-    const start = normalizeImportTime(String(entry.start || ''));
-    const end = entry.end ? normalizeImportTime(String(entry.end)) : '';
-    const day = normalizeImportDay(String(entry.day || ''), defaultDay);
-    const soundUrl = await normalizeEventSoundReference(
-      String(entry.soundUrl || entry.sound_url || entry.sound || entry.audio || '').trim(),
-    );
-
-    if (!title || !start) {
-      continue;
-    }
-
-    insert.run(title, day, start, end || null, soundUrl || null);
-    inserted += 1;
+  for (const [key, value] of Object.entries(values)) {
+    db.prepare(
+      'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    ).run(key, String(value));
   }
-
-  if (inserted === 0) {
-    console.warn('Import events skipped: no valid rows found.');
-  }
-
-  revalidatePath('/');
-  revalidatePath('/admin');
 }
 
-export async function createMufrodat(formData: FormData) {
-  requireDatabase();
+export async function uploadBackgroundImage(formData: FormData) {
+  return guard('layar', 'background-added', async () => {
+    requireDatabase();
 
-  const values = mufrodatSchema.parse({
-    arabic: String(formData.get('arabic') || ''),
-    translation: String(formData.get('translation') || ''),
-  });
-
-  const sql = getDb();
-  sql.prepare('INSERT INTO mufrodat (arabic, translation) VALUES (?, ?)').run(values.arabic, values.translation);
-
-  revalidatePath('/');
-  revalidatePath('/admin');
-}
-
-export async function deleteMufrodat(formData: FormData) {
-  requireDatabase();
-
-  const id = Number(formData.get('id'));
-  if (!Number.isFinite(id)) return;
-
-  getDb().prepare('DELETE FROM mufrodat WHERE id = ?').run(id);
-
-  revalidatePath('/');
-  revalidatePath('/admin');
+    const { buffer, ext } = await acceptBackgroundFile(formData);
+    const relativePath = await writeBackgroundFile(buffer, ext);
+    upsertSetting('backgroundImageUrl', `/assets/${relativePath}`);
+  }, formData);
 }
 
 export async function saveTicker(formData: FormData) {
-  requireDatabase();
+  return guard('ticker', 'ticker-saved', () => {
+    requireDatabase();
 
-  const values = tickerSchema.parse({
-    items: String(formData.get('items') || ''),
-  });
+    const raw = String(formData.get('items') ?? '');
+    if (raw.length > 2000) {
+      throw new PanelError('invalid', 'items (teks berjalan maksimal 2000 karakter)');
+    }
 
-  const items = values.items
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
+    const items = raw
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
 
-  const db = getDb();
-  db.prepare('DELETE FROM ticker_items').run();
-  const insert = db.prepare('INSERT INTO ticker_items (text, sort_order) VALUES (?, ?)');
-  for (const [index, text] of items.entries()) {
-    insert.run(text, index + 1);
+    if (!items.length) {
+      throw new PanelError('ticker-empty');
+    }
+
+    const db = getDb();
+    db.prepare('DELETE FROM ticker_items').run();
+    const insert = db.prepare('INSERT INTO ticker_items (text, sort_order) VALUES (?, ?)');
+    for (const [index, text] of items.entries()) {
+      insert.run(text, index + 1);
+    }
+  }, formData);
+}
+
+export async function uploadEventSound(formData: FormData) {
+  return guard('suara', 'sound-added', async () => {
+    requireDatabase();
+
+    const { originalName, ext, resolvedMime, buffer } = await acceptEventSoundFile(formData);
+
+    getDb()
+      .prepare(
+        `INSERT INTO event_sounds (original_name, mime_type, file_ext, size_bytes, audio_data)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(original_name) DO UPDATE SET
+           mime_type = excluded.mime_type,
+           file_ext = excluded.file_ext,
+           size_bytes = excluded.size_bytes,
+           audio_data = excluded.audio_data,
+           updated_at = datetime('now')`,
+      )
+      .run(originalName, resolvedMime, ext, buffer.length, buffer);
+  }, formData);
+}
+
+export async function createEvent(formData: FormData) {
+  return guard('kegiatan', 'event-added', async () => {
+    requireDatabase();
+
+    const values = readForm(eventSchema, formData, ['title', 'day', 'start', 'end', 'soundUrl', 'note']);
+    const normalizedSoundUrl = await normalizeEventSoundReference(values.soundUrl);
+
+    getDb()
+      .prepare('INSERT INTO events (title, day, start, end_time, sound_url, note) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(values.title, values.day, values.start, values.end || null, normalizedSoundUrl || null, values.note || null);
+  }, formData);
+}
+
+export async function updateEvent(formData: FormData) {
+  return guard('kegiatan', 'event-updated', async () => {
+    requireDatabase();
+
+    const id = readEventId(formData);
+    const values = readForm(eventSchema, formData, ['title', 'day', 'start', 'end', 'soundUrl', 'note']);
+    const normalizedSoundUrl = await normalizeEventSoundReference(values.soundUrl);
+
+    getDb()
+      .prepare(
+        `UPDATE events SET title = ?, day = ?, start = ?, end_time = ?, sound_url = ?, note = ?, updated_at = datetime('now') WHERE id = ?`,
+      )
+      .run(values.title, values.day, values.start, values.end || null, normalizedSoundUrl || null, values.note || null, id);
+  }, formData);
+}
+
+export async function deleteEvent(formData: FormData) {
+  return guard('kegiatan', 'event-deleted', () => {
+    requireDatabase();
+
+    const id = readEventId(formData);
+    const result = getDb().prepare('DELETE FROM events WHERE id = ?').run(id);
+    if (!result.changes) {
+      throw new PanelError('row-missing');
+    }
+  }, formData);
+}
+
+function readEventId(formData: FormData) {
+  const id = Number(formData.get('id'));
+  if (!Number.isFinite(id) || id <= 0) {
+    throw new PanelError('row-missing');
   }
+  return id;
+}
 
-  revalidatePath('/');
-  revalidatePath('/admin');
+export async function importEvents(formData: FormData) {
+  return guard('kegiatan', 'events-imported', async () => {
+    requireDatabase();
+
+    const raw = String(formData.get('eventsJson') || '').trim();
+    if (!raw) {
+      throw new PanelError('events-import-empty', 'Isian impor masih kosong.');
+    }
+
+    const rawPayload = await resolveImportPayload(raw);
+    const defaultDay = getJakartaDay();
+
+    const normalizeJsonText = (value: string) =>
+      value.replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/,\s*([}\]])/g, '$1');
+
+    const toPayload = (value: unknown): unknown[] =>
+      Array.isArray(value)
+        ? value
+        : value && typeof value === 'object'
+          ? (() => {
+              const objectPayload = value as {
+                events?: unknown[];
+                data?: unknown[];
+                items?: unknown[];
+                jadwal?: unknown[];
+              };
+              return (
+                objectPayload.events || objectPayload.data || objectPayload.items || objectPayload.jadwal || [value]
+              );
+            })()
+          : [value];
+
+    let payload: unknown[] = [];
+    let parsedJson = false;
+
+    try {
+      payload = toPayload(JSON.parse(rawPayload));
+      parsedJson = true;
+    } catch {
+      try {
+        payload = toPayload(JSON.parse(normalizeJsonText(rawPayload)));
+        parsedJson = true;
+      } catch {
+        payload = parseBracketScheduleTemplate(rawPayload, defaultDay);
+      }
+    }
+
+    const db = getDb();
+    const insert = db.prepare(
+      'INSERT INTO events (title, day, start, end_time, sound_url, note) VALUES (?, ?, ?, ?, ?, NULL)',
+    );
+    let inserted = 0;
+
+    for (const rawEntry of payload) {
+      const parsedEntry = parsedJson
+        ? importEventSchema.safeParse(rawEntry)
+        : importEventSchema.safeParse({
+            title: (rawEntry as { title?: string }).title,
+            start: (rawEntry as { start?: string }).start,
+            end: (rawEntry as { end?: string }).end,
+            day: (rawEntry as { day?: string }).day,
+            soundUrl: (rawEntry as { soundUrl?: string }).soundUrl,
+          });
+
+      if (!parsedEntry.success) {
+        continue;
+      }
+
+      const entry = parsedEntry.data;
+      const title = String(entry.title || entry.tittle || '').trim();
+      const start = normalizeImportTime(String(entry.start || ''));
+      const end = entry.end ? normalizeImportTime(String(entry.end)) : '';
+      const day = normalizeImportDay(String(entry.day || ''), defaultDay);
+      const soundUrl = await normalizeEventSoundReference(
+        String(entry.soundUrl || entry.sound_url || entry.sound || entry.audio || '').trim(),
+      );
+
+      if (!title || !start) {
+        continue;
+      }
+
+      insert.run(title, day, start, end || null, soundUrl || null);
+      inserted += 1;
+    }
+
+    if (!inserted) {
+      throw new PanelError('events-import-empty');
+    }
+
+    return `${inserted} baris masuk.`;
+  }, formData);
+}
+
+export async function createMufrodat(formData: FormData) {
+  return guard('mufrodat', 'mufrodat-added', () => {
+    requireDatabase();
+
+    const values = readForm(mufrodatSchema, formData, ['arabic', 'translation']);
+    getDb().prepare('INSERT INTO mufrodat (arabic, translation) VALUES (?, ?)').run(values.arabic, values.translation);
+  }, formData);
+}
+
+export async function deleteMufrodat(formData: FormData) {
+  return guard('mufrodat', 'mufrodat-deleted', () => {
+    requireDatabase();
+
+    const id = readEventId(formData);
+    const result = getDb().prepare('DELETE FROM mufrodat WHERE id = ?').run(id);
+    if (!result.changes) {
+      throw new PanelError('row-missing');
+    }
+  }, formData);
 }
 
 export async function saveMufrodatVideoSettings(formData: FormData) {
-  requireDatabase();
+  return guard('video', 'video-settings-saved', () => {
+    requireDatabase();
 
-  const values = mufrodatVideoSettingsSchema.parse({
-    playbackMode: String(formData.get('playbackMode') || 'sequential'),
-    scheduleTimes: String(formData.get('scheduleTimes') || ''),
-  });
+    const values = readForm(mufrodatVideoSettingsSchema, formData, ['playbackMode', 'scheduleTimes']);
+    const normalizedTimes = normalizeScheduleTimes(values.scheduleTimes);
 
-  const normalizedTimes = normalizeScheduleTimes(values.scheduleTimes);
-  upsertSetting('mufrodatVideoPlaybackMode', values.playbackMode);
-  upsertSetting('mufrodatVideoScheduleTimes', normalizedTimes.join(','));
-
-  revalidatePath('/');
-  revalidatePath('/admin');
+    upsertSetting('mufrodatVideoPlaybackMode', values.playbackMode);
+    upsertSetting('mufrodatVideoScheduleTimes', normalizedTimes.join(','));
+  }, formData);
 }
 
-export async function uploadMufrodatVideo(formData: FormData) {
-  try {
+/** Upload and play a single video on the board right now, outside the playlist. */
+export async function playMufrodatVideoOnce(formData: FormData) {
+  return guard('video', 'video-play-once', async () => {
     requireDatabase();
-    await ensureDatabase();
 
-    const payload = formData.get('mufrodatVideo');
-    if (!(payload instanceof File)) {
-      redirectToAdminWithNotice('mufrodat-upload-no-file');
-    }
-
-    if (!payload.size || payload.size > MAX_VIDEO_SIZE_BYTES) {
-      redirectToAdminWithNotice('mufrodat-upload-size-limit');
-    }
-
-    const originalName = sanitizeFileName(payload.name || 'mufrodat-video.mp4', 'mufrodat-video');
-    const ext = path.extname(originalName).toLowerCase();
-    if (!allowedVideoExtensions.has(ext)) {
-      redirectToAdminWithNotice('mufrodat-upload-ext-invalid');
-    }
-
-    const mime = String(payload.type || '').toLowerCase();
-    if (mime && !allowedVideoMimeTypes.has(mime)) {
-      redirectToAdminWithNotice('mufrodat-upload-mime-invalid');
-    }
-
+    const { ext, buffer } = await acceptVideoFile(formData);
+    const relativePath = await writeVideoFile(buffer, ext);
     const nonce = randomUUID();
-    const fileName = `${Date.now()}-${nonce}${ext}`;
-    const relativePath = path.posix.join('videos', 'mufrodat', fileName);
-    const destinationDir = path.join(process.cwd(), 'assets', 'videos', 'mufrodat');
-    const destinationPath = path.join(destinationDir, fileName);
-
-    await fs.mkdir(destinationDir, { recursive: true });
-    const buffer = Buffer.from(await payload.arrayBuffer());
-    await fs.writeFile(destinationPath, buffer);
 
     upsertSetting('mufrodatVideoUrl', `/assets/${relativePath}`);
     upsertSetting('mufrodatVideoPlaybackNonce', nonce);
     upsertSetting('mufrodatVideoPlaybackRequestedAt', new Date().toISOString());
-
-    revalidatePath('/');
-    revalidatePath('/admin');
-    redirectToAdminWithNotice('mufrodat-upload-ok');
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error || '');
-    if (message === 'NEXT_REDIRECT') {
-      throw error;
-    }
-    console.error('Upload mufrodat video gagal:', error);
-    redirectToAdminWithNotice('mufrodat-upload-failed');
-  }
+  }, formData);
 }
 
 export async function uploadMufrodatVideoToPlaylist(formData: FormData) {
-  requireDatabase();
+  return guard('video', 'video-added', async () => {
+    requireDatabase();
 
-  const payload = formData.get('mufrodatVideo');
-  if (!(payload instanceof File)) {
-    console.warn('Upload mufrodat video playlist gagal: file tidak valid.');
-    revalidatePath('/admin');
-    return;
-  }
+    const { originalName, ext, resolvedMime, buffer } = await acceptVideoFile(formData);
+    const relativePath = await writeVideoFile(buffer, ext);
 
-  if (!payload.size || payload.size > MAX_VIDEO_SIZE_BYTES) {
-    console.warn('Upload mufrodat video playlist gagal: ukuran file tidak valid atau melebihi 100MB.');
-    revalidatePath('/admin');
-    return;
-  }
+    const db = getDb();
+    const nextSortRow = db
+      .prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS nextSortOrder FROM mufrodat_videos')
+      .get() as { nextSortOrder: number };
+    const nextSortOrder = Number(nextSortRow?.nextSortOrder || 1);
 
-  const originalName = sanitizeFileName(payload.name || 'mufrodat-video.mp4', 'mufrodat-video');
-  const ext = path.extname(originalName).toLowerCase();
-  if (!allowedVideoExtensions.has(ext)) {
-    console.warn('Upload mufrodat video playlist gagal: ekstensi file tidak didukung.');
-    revalidatePath('/admin');
-    return;
-  }
-
-  const mime = String(payload.type || '').toLowerCase();
-  if (mime && !allowedVideoMimeTypes.has(mime)) {
-    console.warn('Upload mufrodat video playlist gagal: MIME type tidak didukung.');
-    revalidatePath('/admin');
-    return;
-  }
-
-  const fileName = `${Date.now()}-${randomUUID()}${ext}`;
-  const relativePath = path.posix.join('videos', 'mufrodat', fileName);
-  const destinationDir = path.join(process.cwd(), 'assets', 'videos', 'mufrodat');
-  const destinationPath = path.join(destinationDir, fileName);
-
-  await fs.mkdir(destinationDir, { recursive: true });
-  const buffer = Buffer.from(await payload.arrayBuffer());
-  await fs.writeFile(destinationPath, buffer);
-
-  const db = getDb();
-  const nextSortRow = db.prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS nextSortOrder FROM mufrodat_videos').get() as { nextSortOrder: number };
-  const nextSortOrder = Number(nextSortRow?.nextSortOrder || 1);
-  const resolvedMime = mime && allowedVideoMimeTypes.has(mime) ? mime : videoMimeByExtension[ext] || 'video/mp4';
-
-  db.prepare('INSERT INTO mufrodat_videos (original_name, relative_path, mime_type, size_bytes, sort_order) VALUES (?, ?, ?, ?, ?)')
-    .run(originalName, relativePath, resolvedMime, buffer.length, nextSortOrder);
-
-  revalidatePath('/');
-  revalidatePath('/admin');
+    db.prepare(
+      'INSERT INTO mufrodat_videos (original_name, relative_path, mime_type, size_bytes, sort_order) VALUES (?, ?, ?, ?, ?)',
+    ).run(originalName, relativePath, resolvedMime, buffer.length, nextSortOrder);
+  }, formData);
 }
 
 export async function deleteMufrodatVideo(formData: FormData) {
-  requireDatabase();
+  return guard('video', 'video-deleted', async () => {
+    requireDatabase();
 
-  const id = Number(formData.get('id'));
-  if (!Number.isFinite(id) || id <= 0) {
-    return;
-  }
+    const id = readEventId(formData);
+    const target = getDb()
+      .prepare('SELECT relative_path AS relativePath FROM mufrodat_videos WHERE id = ? LIMIT 1')
+      .get(id) as { relativePath: string } | undefined;
 
-  const db = getDb();
-  const target = db.prepare('SELECT relative_path AS relativePath FROM mufrodat_videos WHERE id = ? LIMIT 1').get(id) as { relativePath: string } | undefined;
-  if (!target?.relativePath) {
-    return;
-  }
+    if (!target?.relativePath) {
+      throw new PanelError('row-missing');
+    }
 
-  db.prepare('DELETE FROM mufrodat_videos WHERE id = ?').run(id);
-  db.exec(`
-    UPDATE mufrodat_videos SET sort_order = (
-      SELECT next_sort FROM (
-        SELECT id, ROW_NUMBER() OVER (ORDER BY sort_order ASC, id ASC) AS next_sort
-        FROM mufrodat_videos
-      ) AS ordered WHERE ordered.id = mufrodat_videos.id
-    )
-  `);
+    const db = getDb();
+    db.prepare('DELETE FROM mufrodat_videos WHERE id = ?').run(id);
+    db.exec(`
+      UPDATE mufrodat_videos SET sort_order = (
+        SELECT next_sort FROM (
+          SELECT id, ROW_NUMBER() OVER (ORDER BY sort_order ASC, id ASC) AS next_sort
+          FROM mufrodat_videos
+        ) AS ordered WHERE ordered.id = mufrodat_videos.id
+      )
+    `);
 
-  const assetsRoot = path.join(process.cwd(), 'assets');
-  const absoluteVideoPath = path.resolve(assetsRoot, target.relativePath);
-  if (absoluteVideoPath.startsWith(assetsRoot)) {
-    await fs.unlink(absoluteVideoPath).catch(() => undefined);
-  }
+    const assetsRoot = path.join(process.cwd(), 'assets');
+    const absoluteVideoPath = path.resolve(assetsRoot, target.relativePath);
+    if (absoluteVideoPath.startsWith(assetsRoot)) {
+      await fs.unlink(absoluteVideoPath).catch(() => undefined);
+    }
+  }, formData);
+}
 
-  revalidatePath('/');
-  revalidatePath('/admin');
+export async function stopMufrodatVideoPlayback(formData?: FormData) {
+  return guard('video', 'video-stopped', () => {
+    requireDatabase();
+
+    upsertSetting('mufrodatVideoUrl', '');
+    upsertSetting('mufrodatVideoPlaybackNonce', '');
+    upsertSetting('mufrodatVideoPlaybackRequestedAt', '');
+  }, formData);
 }

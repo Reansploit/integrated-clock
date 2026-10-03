@@ -1,9 +1,8 @@
 import { ClockStage } from '@/components/ClockStage';
-import { AdhanCountdown } from '@/components/AdhanCountdown';
 import { EventSlotMachine } from '@/components/EventSlotMachine';
 import { MufrodatFlip } from '@/components/MufrodatFlip';
 import { PrayerTimesPanel } from '@/components/PrayerTimesPanel';
-import { BootSequence } from '@/components/BootSequence';
+import { Ticker } from '@/components/Ticker';
 import { MufrodatVideoOverlay } from '@/components/MufrodatVideoOverlay';
 import { LiveAnnouncementOverlay } from '@/components/LiveAnnouncementOverlay';
 import { VocabTakeoverOverlay } from '@/components/VocabTakeoverOverlay';
@@ -14,7 +13,7 @@ import { listAssetUrls, resolveAssetUrl } from '@/lib/media';
 
 export const revalidate = 60;
 
-const gregorianFormatter = new Intl.DateTimeFormat('en-US', {
+const gregorianFormatter = new Intl.DateTimeFormat('en-GB', {
   weekday: 'long',
   day: 'numeric',
   month: 'long',
@@ -22,7 +21,7 @@ const gregorianFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: 'Asia/Jakarta',
 });
 
-const hijriFormatter = new Intl.DateTimeFormat('en-US-u-ca-islamic-umalqura', {
+const hijriFormatter = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura', {
   day: 'numeric',
   month: 'long',
   year: 'numeric',
@@ -34,7 +33,8 @@ export default async function Home() {
   const prayerTimes = await getPrayerTimes(data.settings.cityId);
   const weather = await getWeather();
   const nextPrayer = getNextPrayer(prayerTimes, new Date(), { includeImsak: false });
-  const tickerItems = [...data.ticker, data.settings.runningText, ...data.ticker];
+  // Event days are stored as Indonesian values ('senin'..'minggu'), so the
+  // match stays in id-ID even though the board reads English.
   const todayDay = new Intl.DateTimeFormat('id-ID', {
     weekday: 'long',
     timeZone: 'Asia/Jakarta',
@@ -45,18 +45,48 @@ export default async function Home() {
       ...event,
       soundUrl: resolveAssetUrl(event.soundUrl || '', ['audio/events']),
     }));
+
   const now = new Date();
   const gregorianDate = gregorianFormatter.format(now);
-  const hijriDate = `${hijriFormatter.format(now)} H`;
-  const visibleMufrodat = data.mufrodat.length ? data.mufrodat : [];
+  // ICU's English Islamic output orders month first ("Rabiʻ II 22, 1448 AH",
+  // US order). Readers here expect day first, so the parts are reassembled
+  // from formatToParts instead of trusting .format() order. Month names use
+  // the familiar Indonesian spellings rather than the CLDR English ones.
+  const hijriDate = (() => {
+    const monthNames: Record<string, string> = {
+      Muharram: 'Muharram',
+      Safar: 'Safar',
+      'Rabiʻ I': 'Rabiul Awal',
+      'Rabiʻ II': 'Rabiul Akhir',
+      'Jumada I': 'Jumadil Awal',
+      'Jumada II': 'Jumadil Akhir',
+      Rajab: 'Rajab',
+      'Shaʻban': 'Syakban',
+      Ramadan: 'Ramadan',
+      Shawwal: 'Syawal',
+      'Dhuʻl-Qiʻdah': 'Zulkaidah',
+      'Dhuʻl-Hijjah': 'Zulhijah',
+    };
+    const parts = new Map(hijriFormatter.formatToParts(now).map((part) => [part.type, part.value]));
+    const day = parts.get('day') ?? '';
+    const month = monthNames[parts.get('month') ?? ''] ?? parts.get('month') ?? '';
+    const year = parts.get('year') ?? '';
+    const era = parts.get('era') ?? '';
+    return `${day} ${month} ${year} ${era}`.replace(/\s+/g, ' ').trim();
+  })();
+
   const backgroundCandidates = listAssetUrls(['backgrounds'], ['.jpg', '.jpeg', '.png', '.gif', '.webp']);
   const resolvedBackgroundImageUrl = resolveAssetUrl(data.settings.backgroundImageUrl, ['backgrounds']);
   const backgroundImageUrl = resolvedBackgroundImageUrl || backgroundCandidates[0] || '';
-  const bootAnimationUrl = resolveAssetUrl(data.settings.bootAnimationUrl, ['boot']);
-  const introImageUrl = resolveAssetUrl(data.settings.introImageUrl, ['logos', 'sponsors', 'boot']);
-  const shellStyle = backgroundImageUrl
+
+  // The board sits on a photo the operator uploads, so the scrim is set from the
+  // worst case: a pure white background. At 0.86 the brightest pixel left under
+  // the text still clears 4.5:1 for muted copy on the solid surfaces. The photo
+  // itself never sits as a permanent backdrop: the peek layer below hides it
+  // and only lets it through faded, five seconds out of every twenty.
+  const wallpaperStyle = backgroundImageUrl
     ? {
-        backgroundImage: `linear-gradient(rgba(4, 7, 13, 0.76), rgba(4, 7, 13, 0.76)), url(${backgroundImageUrl})`,
+        backgroundImage: `linear-gradient(rgba(5, 10, 18, 0.86), rgba(5, 10, 18, 0.9)), url(${backgroundImageUrl})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
@@ -64,77 +94,48 @@ export default async function Home() {
     : undefined;
 
   return (
-    <main className="page-shell" style={shellStyle}>
-      <div className="page-noise" />
-      <BootSequence bootAnimationUrl={bootAnimationUrl} introImageUrl={introImageUrl} />
+    <main className="page-shell">
+      {wallpaperStyle ? <div className="wallpaper-peek" style={wallpaperStyle} aria-hidden="true" /> : null}
       <MufrodatVideoOverlay src="" playbackNonce="" />
       <LiveAnnouncementOverlay />
       <VocabTakeoverOverlay slots={data.vocabSlots} items={data.vocabItems} />
 
-      <header className="top-strip glass-panel">
-        <div className="top-strip__left date-lockup">
-          <div className="date-lockup__gregorian">{gregorianDate}</div>
-          <div className="date-lockup__hijri">{hijriDate}</div>
-        </div>
-        <div className="top-strip__right brand-lockup">
-          Wonosalam Boarding School
+      <header className="top-strip">
+        <span className="top-strip__brand">Wonosalam Boarding School</span>
+        <div className="top-strip__dates">
+          <span className="date-lockup__gregorian">{gregorianDate}</span>
+          <span className="date-lockup__hijri">{hijriDate}</span>
         </div>
       </header>
 
-      <section className="dashboard-grid">
-        <article className="glass-panel panel-surface clock-panel">
-          <ClockStage temp={weather?.temp ?? null} />
-          <div className="clock-mini">
-            <AdhanCountdown prayerTimes={prayerTimes} soundUrl={resolveAssetUrl(data.settings.adhanSoundUrl, ['audio/adhan'])} />
-          </div>
-        </article>
+      <div className="board">
+        <div className="board__main">
+          <ClockStage temp={weather?.temp ?? null} prayerTimes={prayerTimes} />
 
-        <article className="glass-panel panel-surface prayer-panel">
-          <div className="panel-heading">
-            <div>
-              <p className="panel-kicker">Prayer Times</p>
-              <h2>Prayer Schedule</h2>
-            </div>
+          <div className="board__secondary">
+            <section className="mini-panel">
+              <h2 className="mini-panel__title">Current Event</h2>
+              <EventSlotMachine
+                events={todayEvents}
+                soundUrl={resolveAssetUrl(data.settings.eventSoundUrl, ['audio/events'])}
+              />
+            </section>
+
+            <section className="mini-panel">
+              <h2 className="mini-panel__title">Vocabulary</h2>
+              <MufrodatFlip items={data.mufrodat} />
+            </section>
           </div>
+        </div>
+
+        <aside className="rail">
+          <h2 className="rail__title">Prayer Times</h2>
           <PrayerTimesPanel prayerTimes={prayerTimes} initialNextPrayer={nextPrayer} />
-        </article>
+        </aside>
+      </div>
 
-        <article className="glass-panel panel-surface events-panel">
-          <div className="panel-heading">
-            <div>
-              <p className="panel-kicker">Events</p>
-              <h2>Today's Events</h2>
-            </div>
-          </div>
-
-          <EventSlotMachine
-            events={todayEvents}
-            soundUrl={resolveAssetUrl(data.settings.eventSoundUrl, ['audio/events'])}
-          />
-        </article>
-
-        <article className="glass-panel panel-surface mufrodat-panel">
-          <div className="panel-heading">
-            <div>
-              <p className="panel-kicker">Vocabulary</p>
-              <h2>Vocabulary</h2>
-            </div>
-          </div>
-
-          <MufrodatFlip items={visibleMufrodat} />
-        </article>
-      </section>
-
-      <footer className="footer-stack">
-        <section className="ticker-shell glass-panel">
-          <div className="ticker-track">
-            {tickerItems.map((item, index) => (
-              <span key={`${item}-${index}`} className="ticker-item">
-                {item}
-              </span>
-            ))}
-          </div>
-        </section>
+      <footer className="ticker-footer">
+        <Ticker items={data.ticker} />
       </footer>
     </main>
   );

@@ -11,18 +11,18 @@ export async function GET() {
     const active = findActiveSlot(slots, getJakartaNow());
     if (!active) {
       return NextResponse.json(
-        { ok: true, slot: null, items: [] },
+        { ok: true, slot: null, slots, items: [] },
         { headers: { 'Cache-Control': 'no-store' } },
       );
     }
     const items = getVocabItems();
     return NextResponse.json(
-      { ok: true, slot: active, items },
+      { ok: true, slot: active, slots, items },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch {
     return NextResponse.json(
-      { ok: true, slot: null, items: [] },
+      { ok: true, slot: null, slots: [], items: [] },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   }

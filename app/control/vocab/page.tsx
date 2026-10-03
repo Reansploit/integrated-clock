@@ -9,16 +9,59 @@ import {
   updateVocabItem,
   updateVocabSlot,
 } from './actions';
-import { uploadEventSound } from '@/app/admin/actions';
 
+import { SubmitButton } from '@/components/SubmitButton';
 import { getEventSounds, getVocabItems, getVocabSlots } from '@/lib/db';
+import { readNoticeDetail, resolveNotice } from '@/lib/panel-notice';
 import { getVocabLive } from '@/lib/vocab-live';
 
 export const dynamic = 'force-dynamic';
 
-const DAY_OPTIONS = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu'];
+/**
+ * Design Read: the counterpart of the admin console, for the one feature that
+ * owns the whole screen for a scheduled window. Same workbench shell, so the
+ * operator moves between the two pages without relearning anything. Dials:
+ * ENERGY 1 / RHYTHM 2 / MOTION 1.
+ */
 
-export default async function VocabControlPage() {
+const WEEK_DAYS = [
+  { value: 'senin', label: 'Senin' },
+  { value: 'selasa', label: 'Selasa' },
+  { value: 'rabu', label: 'Rabu' },
+  { value: 'kamis', label: 'Kamis' },
+  { value: 'jumat', label: 'Jumat' },
+  { value: 'sabtu', label: 'Sabtu' },
+  { value: 'minggu', label: 'Minggu' },
+] as const;
+
+const SECTIONS = [
+  { href: '#kartu', label: 'Kartu' },
+  { href: '#slot', label: 'Slot tayang' },
+  { href: '#manual', label: 'Kendali manual' },
+] as const;
+
+type VocabPageProps = {
+  searchParams?: Promise<{ notice?: string; detail?: string }>;
+};
+
+function daySummary(days: string) {
+  const selected = days.split(',').map((day) => day.trim()).filter(Boolean);
+  if (!selected.length) {
+    return 'tanpa hari';
+  }
+  return WEEK_DAYS.filter((day) => selected.includes(day.value))
+    .map((day) => day.label)
+    .join(', ');
+}
+
+function audioLabel(url: string, eventSounds: Array<{ soundUrl: string; originalName: string }>) {
+  if (!url) {
+    return '';
+  }
+  return eventSounds.find((sound) => sound.soundUrl === url)?.originalName || url;
+}
+
+export default async function VocabControlPage({ searchParams }: VocabPageProps) {
   const [items, slots, eventSounds] = await Promise.all([
     Promise.resolve(getVocabItems()),
     Promise.resolve(getVocabSlots()),
@@ -26,347 +69,499 @@ export default async function VocabControlPage() {
   ]);
   const live = getVocabLive();
   const manualSlots = slots.filter((slot) => slot.mode === 'manual' && slot.enabled);
+  const activeSlots = slots.filter((slot) => slot.enabled);
+
+  const params = (await searchParams) || {};
+  const notice = resolveNotice(params.notice);
+  const noticeDetail = readNoticeDetail(params.detail);
 
   return (
-    <main className="admin-page">
-      <section className="admin-hero glass-panel">
-        <div>
-          <p className="eyebrow">Vocab Control</p>
-          <h1>Kartu & jadwal tayang vocab</h1>
-          <p className="hero-text">
-            Isi kartu English / Arab / arti / contoh di sini. Atur jam tayang per hari di bawah;
-            display otomatis fullscreen saat slot aktif. Mode manual bisa diNext/Prev dari sini.
+    <main className="console">
+      <header className="console__head">
+        <div className="console__headline">
+          <h1>Kosakata tayang</h1>
+          <p>
+            Kartu kosakata yang mengambil alih layar papan penuh selama jam yang ditentukan di bawah. Di luar jam
+            itu papan kembali normal.
           </p>
         </div>
-        <div className="admin-status ok">
-          <strong>{items.length} kartu • {slots.filter((slot) => slot.enabled).length} slot aktif</strong>
-          <span>{manualSlots.length ? `Live manual: slot #${live?.slotId ?? '—'} index ${live?.index ?? '—'}` : 'Tidak ada slot manual aktif'}</span>
+
+        <dl className="console__facts">
+          <div>
+            <dt>Kartu tersimpan</dt>
+            <dd>{items.length} kartu</dd>
+          </div>
+          <div>
+            <dt>Slot aktif</dt>
+            <dd>
+              {activeSlots.length} dari {slots.length}
+            </dd>
+          </div>
+          <div>
+            <dt>Slot manual aktif</dt>
+            <dd>{manualSlots.length}</dd>
+          </div>
+        </dl>
+
+        <nav className="console__links" aria-label="Halaman lain">
+          <a className="btn btn--quiet" href="/">
+            Buka papan
+          </a>
+          <a className="btn btn--quiet" href="/admin">
+            Panel admin
+          </a>
+        </nav>
+      </header>
+
+      <div className="console__sticky">
+        <nav className="console__index" aria-label="Daftar bagian">
+          <span className="console__index-title">Bagian</span>
+          <ul>
+            {SECTIONS.map((section) => (
+              <li key={section.href}>
+                <a href={section.href}>{section.label}</a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        {notice ? (
+          <p className="console__notice" data-tone={notice.tone} role="status">
+            <strong>{notice.text}</strong>
+            {noticeDetail ? <span>{noticeDetail}</span> : null}
+          </p>
+        ) : null}
+      </div>
+
+      <section className="panel" id="kartu">
+        <div className="panel__head">
+          <h2>Kartu</h2>
+          <p>
+            Satu baris = satu kartu. Urutan baris di daftar ini ikut dipakai saat mode putar Urut, jadi
+            perpindahan kartu bisa diatur dengan tombol naik dan turun.
+          </p>
         </div>
-      </section>
 
-      <section className="admin-grid">
-        <article className="admin-card glass-panel">
-          <h2>Kartu Vocab</h2>
-          <form action={createVocabItem} className="admin-form compact">
-            <label>
-              English
-              <input name="english" placeholder="Prayer" />
-            </label>
-            <label>
-              Arab
-              <input name="arabic" placeholder="صَلَاة" dir="rtl" />
-            </label>
-            <label>
-              Meaning
-              <input name="meaning" placeholder="Shalat" />
-            </label>
-            <label>
-              Contoh (Arab, opsional)
-              <input name="exampleAr" placeholder="المثال" dir="rtl" />
-            </label>
-            <label>
-              Arti contoh (opsional)
-              <input name="exampleMeaning" placeholder="Meaning 2" />
-            </label>
-            <label>
-              Audio dari library
-              <select name="audioPreset" defaultValue="">
-                <option value="">Tanpa audio</option>
-                {eventSounds.map((sound) => (
-                  <option key={sound.id} value={sound.soundUrl}>
-                    {sound.originalName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <details className="admin-edit-details">
-              <summary className="admin-edit-summary">URL manual</summary>
-              <label>
-                Tempel URL audio sendiri (menang atas pilihan library)
-                <input name="audioUrl" placeholder="/assets/audio/vocab/kata.mp3" />
-              </label>
-            </details>
-            <button type="submit">Tambah kartu</button>
-          </form>
+        <form action={createVocabItem} className="field-grid">
+          <label className="field">
+            <span>Inggris</span>
+            <input name="english" placeholder="Prayer" />
+          </label>
 
-          <div className="admin-list">
-            {items.map((item) => (
-              <div key={item.id} className="admin-list-item">
-                <div className="admin-list-item__head">
-                  <div>
-                    <strong>{item.english || '—'} / {item.arabic || '—'}</strong>
-                    <p>{item.meaning || '—'}</p>
-                    {item.exampleAr || item.exampleMeaning ? (
-                      <p>Contoh: {item.exampleAr} — {item.exampleMeaning}</p>
-                    ) : null}
-                    {item.audioUrl ? (
-                      <p>
-                        audio: {eventSounds.find((sound) => sound.soundUrl === item.audioUrl)?.originalName || item.audioUrl}
-                      </p>
-                    ) : null}
-                    {item.audioUrl ? <audio controls preload="none" src={item.audioUrl} /> : null}
-                  </div>
-                  <div className="admin-list-item__actions">
-                    <form action={moveVocabItem}>
-                      <input type="hidden" name="id" value={item.id} />
-                      <input type="hidden" name="direction" value="up" />
-                      <button type="submit" aria-label={`Naikkan ${item.english}`}>↑</button>
-                    </form>
-                    <form action={moveVocabItem}>
-                      <input type="hidden" name="id" value={item.id} />
-                      <input type="hidden" name="direction" value="down" />
-                      <button type="submit" aria-label={`Turunkan ${item.english}`}>↓</button>
-                    </form>
-                    <details className="admin-edit-details">
-                      <summary className="admin-edit-summary">Edit</summary>
-                      <form action={updateVocabItem} className="admin-form compact admin-inline-edit-form">
-                        <input type="hidden" name="id" value={item.id} />
-                        <label>
-                          English
-                          <input name="english" defaultValue={item.english} />
-                        </label>
-                        <label>
-                          Arab
-                          <input name="arabic" defaultValue={item.arabic} dir="rtl" />
-                        </label>
-                        <label>
-                          Meaning
-                          <input name="meaning" defaultValue={item.meaning} />
-                        </label>
-                        <label>
-                          Contoh (Arab)
-                          <input name="exampleAr" defaultValue={item.exampleAr} dir="rtl" />
-                        </label>
-                        <label>
-                          Arti contoh
-                          <input name="exampleMeaning" defaultValue={item.exampleMeaning} />
-                        </label>
-                        <label>
-                          Audio dari library
-                          <select name="audioPreset" defaultValue={eventSounds.some((sound) => sound.soundUrl === item.audioUrl) ? item.audioUrl : ''}>
-                            <option value="">Tanpa audio</option>
-                            {eventSounds.map((sound) => (
-                              <option key={sound.id} value={sound.soundUrl}>
-                                {sound.originalName}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <details className="admin-edit-details">
-                          <summary className="admin-edit-summary">URL manual</summary>
-                          <label>
-                            Tempel URL audio sendiri (menang atas pilihan library)
-                            <input
-                              name="audioUrl"
-                              defaultValue={eventSounds.some((sound) => sound.soundUrl === item.audioUrl) ? '' : item.audioUrl}
-                              placeholder="/assets/audio/vocab/kata.mp3"
-                            />
-                          </label>
-                        </details>
-                        <button type="submit">Simpan</button>
-                      </form>
-                    </details>
-                    <form action={deleteVocabItem}>
-                      <input type="hidden" name="id" value={item.id} />
-                      <button type="submit" className="danger">Hapus</button>
-                    </form>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-          {!items.length ? <p className="fallback-note">Belum ada kartu. Tambahkan dulu lewat form di atas.</p> : null}
-        </article>
+          <label className="field">
+            <span>Arab</span>
+            <input name="arabic" dir="rtl" placeholder="صَلَاة" />
+          </label>
 
-        <article className="admin-card glass-panel">
-          <h2>Jadwal Tayang (multi-slot)</h2>
-          <form action={createVocabSlot} className="admin-form compact">
-            <label>
-              Nama slot
-              <input name="title" placeholder="Halaqah Malam" required />
-            </label>
-            <fieldset className="admin-form compact">
-              <legend>Hari</legend>
-              {DAY_OPTIONS.map((day) => (
-                <label key={day}>
-                  <input type="checkbox" name="days" value={day} /> {day}
-                </label>
-              ))}
-            </fieldset>
-            <label>
-              Mulai (HH:MM)
-              <input name="start" placeholder="21:00" required />
-            </label>
-            <label>
-              Selesai (HH:MM)
-              <input name="end" placeholder="21:15" required />
-            </label>
-            <label>
-              Mode putar
-              <select name="mode" defaultValue="auto">
-                <option value="auto">Auto (interval detik)</option>
-                <option value="manual">Manual (Next/Prev dari sini)</option>
-              </select>
-            </label>
-            <label>
-              Interval auto (detik)
-              <input name="intervalSec" type="number" min={3} max={120} defaultValue={10} />
-            </label>
-            <label>
-              Urutan
-              <select name="orderMode" defaultValue="sequential">
-                <option value="sequential">Urut</option>
-                <option value="random">Acak</option>
-              </select>
-            </label>
-            <label>
-              <input type="checkbox" name="enabled" value="on" defaultChecked /> Aktif
-            </label>
-            <button type="submit">Tambah slot</button>
-          </form>
+          <label className="field">
+            <span>Arti</span>
+            <input name="meaning" placeholder="Shalat" />
+          </label>
 
-          <div className="admin-list">
-            {slots.map((slot) => (
-              <div key={slot.id} className="admin-list-item">
-                <div className="admin-list-item__head">
-                  <div>
-                    <strong>{slot.title}</strong>
-                    <p>{slot.days} • {slot.start}–{slot.end} • {slot.mode} • {slot.intervalSec}d • {slot.orderMode}</p>
-                    <p>{slot.enabled ? 'Aktif' : 'Nonaktif'}</p>
-                  </div>
-                  <div className="admin-list-item__actions">
-                    <details className="admin-edit-details">
-                      <summary className="admin-edit-summary">Edit</summary>
-                      <form action={updateVocabSlot} className="admin-form compact admin-inline-edit-form">
-                        <input type="hidden" name="id" value={slot.id} />
-                        <label>
-                          Nama slot
-                          <input name="title" defaultValue={slot.title} />
-                        </label>
-                        <fieldset className="admin-form compact">
-                          <legend>Hari</legend>
-                          {DAY_OPTIONS.map((day) => (
-                            <label key={day}>
-                              <input
-                                type="checkbox"
-                                name="days"
-                                value={day}
-                                defaultChecked={slot.days.split(',').includes(day)}
-                              /> {day}
-                            </label>
-                          ))}
-                        </fieldset>
-                        <label>
-                          Mulai (HH:MM)
-                          <input name="start" defaultValue={slot.start} />
-                        </label>
-                        <label>
-                          Selesai (HH:MM)
-                          <input name="end" defaultValue={slot.end} />
-                        </label>
-                        <label>
-                          Mode putar
-                          <select name="mode" defaultValue={slot.mode}>
-                            <option value="auto">Auto</option>
-                            <option value="manual">Manual</option>
-                          </select>
-                        </label>
-                        <label>
-                          Interval auto (detik)
-                          <input name="intervalSec" type="number" min={3} max={120} defaultValue={slot.intervalSec} />
-                        </label>
-                        <label>
-                          Urutan
-                          <select name="orderMode" defaultValue={slot.orderMode}>
-                            <option value="sequential">Urut</option>
-                            <option value="random">Acak</option>
-                          </select>
-                        </label>
-                        <label>
-                          <input type="checkbox" name="enabled" value="on" defaultChecked={slot.enabled} /> Aktif
-                        </label>
-                        <button type="submit">Simpan</button>
-                      </form>
-                    </details>
-                    <form action={deleteVocabSlot}>
-                      <input type="hidden" name="id" value={slot.id} />
-                      <button type="submit" className="danger">Hapus</button>
-                    </form>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-          {!slots.length ? <p className="fallback-note">Belum ada slot. Contoh: Halaqah Malam 21:00–21:15.</p> : null}
-        </article>
+          <label className="field">
+            <span>Contoh, bahasa Arab</span>
+            <input name="exampleAr" dir="rtl" placeholder="المثال" />
+          </label>
 
-        <article className="admin-card glass-panel">
-          <h2>Library Audio</h2>
-          <form action={uploadEventSound} className="admin-form compact">
-            <label>
-              Upload suara (mp3/wav/ogg/m4a/aac, maks 20MB)
-              <input name="eventSound" type="file" accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/aac" required />
-            </label>
-            <p className="fallback-note">
-              Nama mengikuti file asli. Upload ulang nama sama akan mengganti isi lama.
-              Setelah upload, suara langsung bisa dipilih di dropdown kartu.
-            </p>
-            <button type="submit">Upload ke library</button>
-          </form>
+          <label className="field">
+            <span>Arti contoh</span>
+            <input name="exampleMeaning" placeholder="Contoh kalimat" />
+          </label>
 
-          {eventSounds.length ? (
-            <div className="admin-list">
+          <label className="field">
+            <span>Audio</span>
+            <select name="audioPreset" defaultValue="">
+              <option value="">Tanpa audio</option>
               {eventSounds.map((sound) => (
-                <div key={sound.id} className="admin-list-item">
-                  <div>
-                    <strong>{sound.originalName}</strong>
-                    <p>{sound.soundUrl}</p>
-                  </div>
-                  <audio controls preload="none" src={sound.soundUrl} />
-                </div>
+                <option key={sound.id} value={sound.soundUrl}>
+                  {sound.originalName}
+                </option>
               ))}
-            </div>
-          ) : (
-            <p className="fallback-note">Library masih kosong. Upload dulu, lalu dengarkan di sini sebelum dipasang ke kartu.</p>
-          )}
-        </article>
+            </select>
+            <small>
+              Daftar ini isi dari perpustakaan suara di panel admin.{' '}
+              <a href="/admin#suara">Kelola perpustakaan suara</a>.
+            </small>
+          </label>
 
-        <article className="admin-card glass-panel span-full">
-          <h2>Kendali Manual</h2>
-          {!manualSlots.length ? (
-            <p className="fallback-note">Tidak ada slot manual yang aktif. Ubah slot ke mode manual untuk mengendalikan kartu dari sini.</p>
-          ) : (
-            <div className="admin-list">
-              {manualSlots.map((slot) => (
-                <div key={slot.id} className="admin-list-item">
-                  <div className="admin-list-item__head">
-                    <div>
-                      <strong>{slot.title}</strong>
-                      <p>Index live: {live?.slotId === slot.id ? live.index + 1 : '—'} / {items.length}</p>
-                    </div>
-                    <div className="admin-list-item__actions">
-                      <form action={stepManualVocab}>
-                        <input type="hidden" name="slotId" value={slot.id} />
-                        <input type="hidden" name="direction" value="prev" />
-                        <button type="submit">← Prev</button>
-                      </form>
-                      <form action={stepManualVocab}>
-                        <input type="hidden" name="slotId" value={slot.id} />
-                        <input type="hidden" name="direction" value="next" />
-                        <button type="submit">Next →</button>
-                      </form>
-                    </div>
+          <label className="field field--wide">
+            <span>URL audio manual</span>
+            <input name="audioUrl" placeholder="/assets/audio/vocab/kata.mp3" />
+            <small>Kalau diisi, URL ini menang atas pilihan audio di atas.</small>
+          </label>
+
+          <div className="field-grid__actions">
+            <SubmitButton pendingLabel="Menyimpan">Tambah kartu</SubmitButton>
+          </div>
+        </form>
+
+        {items.length ? (
+          <ul className="rows">
+            {items.map((item, index) => (
+              <li key={item.id} className="row">
+                <div className="row__body">
+                  <div className="row__title">
+                    <span className="row__day">{index + 1}</span>
+                    <strong>{item.english || 'Tanpa teks Inggris'}</strong>
+                    {item.arabic ? (
+                      <strong className="arabic" dir="rtl">
+                        {item.arabic}
+                      </strong>
+                    ) : null}
                   </div>
+                  {item.meaning ? <p className="row__meta">{item.meaning}</p> : null}
+                  {item.exampleAr || item.exampleMeaning ? (
+                    <p className="row__meta">
+                      Contoh: {item.exampleAr || 'tanpa teks Arab'} | {item.exampleMeaning || 'tanpa arti'}
+                    </p>
+                  ) : null}
+                  {item.audioUrl ? (
+                    <p className="row__meta">Audio: {audioLabel(item.audioUrl, eventSounds)}</p>
+                  ) : null}
+                  {item.audioUrl ? <audio controls preload="none" src={item.audioUrl} /> : null}
                 </div>
-              ))}
-            </div>
-          )}
-          <form action={stopManualVocab} className="admin-form compact">
-            <button type="submit" className="danger">Hentikan live manual</button>
-          </form>
-        </article>
+
+                <div className="row__actions">
+                  <form action={moveVocabItem}>
+                    <input type="hidden" name="id" value={item.id} />
+                    <input type="hidden" name="direction" value="up" />
+                    <button
+                      type="submit"
+                      className="btn btn--quiet"
+                      disabled={index === 0}
+                      aria-label={`Naikkan ${item.english || 'kartu tanpa teks Inggris'} satu urutan`}
+                    >
+                      Naik
+                    </button>
+                  </form>
+
+                  <form action={moveVocabItem}>
+                    <input type="hidden" name="id" value={item.id} />
+                    <input type="hidden" name="direction" value="down" />
+                    <button
+                      type="submit"
+                      className="btn btn--quiet"
+                      disabled={index === items.length - 1}
+                      aria-label={`Turunkan ${item.english || 'kartu tanpa teks Inggris'} satu urutan`}
+                    >
+                      Turun
+                    </button>
+                  </form>
+
+                  <details className="disclosure disclosure--inline">
+                    <summary>Ubah</summary>
+                    <form action={updateVocabItem} className="field-grid">
+                      <input type="hidden" name="id" value={item.id} />
+                      <label className="field">
+                        <span>Inggris</span>
+                        <input name="english" defaultValue={item.english} />
+                      </label>
+                      <label className="field">
+                        <span>Arab</span>
+                        <input name="arabic" defaultValue={item.arabic} dir="rtl" />
+                      </label>
+                      <label className="field">
+                        <span>Arti</span>
+                        <input name="meaning" defaultValue={item.meaning} />
+                      </label>
+                      <label className="field">
+                        <span>Contoh, bahasa Arab</span>
+                        <input name="exampleAr" defaultValue={item.exampleAr} dir="rtl" />
+                      </label>
+                      <label className="field">
+                        <span>Arti contoh</span>
+                        <input name="exampleMeaning" defaultValue={item.exampleMeaning} />
+                      </label>
+                      <label className="field">
+                        <span>Audio</span>
+                        <select
+                          name="audioPreset"
+                          defaultValue={
+                            eventSounds.some((sound) => sound.soundUrl === item.audioUrl) ? item.audioUrl : ''
+                          }
+                        >
+                          <option value="">Tanpa audio</option>
+                          {eventSounds.map((sound) => (
+                            <option key={sound.id} value={sound.soundUrl}>
+                              {sound.originalName}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field field--wide">
+                        <span>URL audio manual</span>
+                        <input
+                          name="audioUrl"
+                          defaultValue={
+                            eventSounds.some((sound) => sound.soundUrl === item.audioUrl) ? '' : item.audioUrl
+                          }
+                        />
+                      </label>
+                      <div className="field-grid__actions">
+                        <SubmitButton pendingLabel="Menyimpan">Simpan kartu</SubmitButton>
+                      </div>
+                    </form>
+                  </details>
+
+                  <form action={deleteVocabItem}>
+                    <input type="hidden" name="id" value={item.id} />
+                    <SubmitButton
+                      pendingLabel="Menghapus"
+                      confirmMessage={`Hapus kartu "${item.english || item.arabic || 'tanpa nama'}"?`}
+                      variant="danger"
+                    >
+                      Hapus
+                    </SubmitButton>
+                  </form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="empty">
+            Belum ada kartu. Isi form di atas untuk menambah yang pertama, minimal satu dari kolom Inggris atau
+            Arab.
+          </p>
+        )}
       </section>
 
+      <section className="panel" id="slot">
+        <div className="panel__head">
+          <h2>Slot tayang</h2>
+          <p>
+            Jendela waktu kartu tampil, per hari. Selama slot aktif, papan menampilkan kartu mode Otomatis atau
+            mengikuti kendali manual di bawah.
+          </p>
+        </div>
+
+        <form action={createVocabSlot} className="field-grid">
+          <label className="field">
+            <span>Nama slot</span>
+            <input name="title" placeholder="Halaqah malam" required />
+          </label>
+
+          <fieldset className="field field--wide field--checks">
+            <legend>Hari</legend>
+            {WEEK_DAYS.map((day) => (
+              <label key={day.value}>
+                <input type="checkbox" name="days" value={day.value} />
+                <span>{day.label}</span>
+              </label>
+            ))}
+          </fieldset>
+
+          <label className="field">
+            <span>Mulai</span>
+            <input name="start" type="time" required />
+          </label>
+
+          <label className="field">
+            <span>Selesai</span>
+            <input name="end" type="time" required />
+          </label>
+
+          <label className="field">
+            <span>Mode putar</span>
+            <select name="mode" defaultValue="auto">
+              <option value="auto">Otomatis, ganti kartu tiap interval</option>
+              <option value="manual">Manual, dikendalikan dari bawah</option>
+            </select>
+          </label>
+
+          <label className="field">
+            <span>Interval, detik</span>
+            <input name="intervalSec" type="number" min={3} max={120} defaultValue={10} />
+          </label>
+
+          <label className="field">
+            <span>Urutan kartu</span>
+            <select name="orderMode" defaultValue="sequential">
+              <option value="sequential">Ikuti urutan daftar</option>
+              <option value="random">Acak</option>
+            </select>
+          </label>
+
+          <label className="field field--check">
+            <span>Aktif</span>
+            <input type="checkbox" name="enabled" value="on" defaultChecked />
+          </label>
+
+          <div className="field-grid__actions">
+            <SubmitButton pendingLabel="Menyimpan">Tambah slot</SubmitButton>
+          </div>
+        </form>
+
+        {slots.length ? (
+          <ul className="rows">
+            {slots.map((slot) => (
+              <li key={slot.id} className="row">
+                <div className="row__body">
+                  <div className="row__title">
+                    <strong>{slot.title}</strong>
+                    <span className="tag" data-off={slot.enabled ? undefined : 'true'}>
+                      {slot.enabled ? 'Aktif' : 'Nonaktif'}
+                    </span>
+                  </div>
+                  <p className="row__meta">
+                    {daySummary(slot.days)}, {slot.start} sampai {slot.end} | mode{' '}
+                    {slot.mode === 'manual' ? 'manual' : 'otomatis'} | tiap {slot.intervalSec} detik | urutan{' '}
+                    {slot.orderMode === 'random' ? 'acak' : 'mengikuti daftar'}
+                  </p>
+                </div>
+
+                <div className="row__actions">
+                  <details className="disclosure disclosure--inline">
+                    <summary>Ubah</summary>
+                    <form action={updateVocabSlot} className="field-grid">
+                      <input type="hidden" name="id" value={slot.id} />
+                      <label className="field field--wide">
+                        <span>Nama slot</span>
+                        <input name="title" defaultValue={slot.title} required />
+                      </label>
+                      <fieldset className="field field--wide field--checks">
+                        <legend>Hari</legend>
+                        {WEEK_DAYS.map((day) => (
+                          <label key={day.value}>
+                            <input
+                              type="checkbox"
+                              name="days"
+                              value={day.value}
+                              defaultChecked={slot.days.split(',').includes(day.value)}
+                            />
+                            <span>{day.label}</span>
+                          </label>
+                        ))}
+                      </fieldset>
+                      <label className="field">
+                        <span>Mulai</span>
+                        <input name="start" type="time" defaultValue={slot.start} required />
+                      </label>
+                      <label className="field">
+                        <span>Selesai</span>
+                        <input name="end" type="time" defaultValue={slot.end} required />
+                      </label>
+                      <label className="field">
+                        <span>Mode putar</span>
+                        <select name="mode" defaultValue={slot.mode}>
+                          <option value="auto">Otomatis</option>
+                          <option value="manual">Manual</option>
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Interval, detik</span>
+                        <input name="intervalSec" type="number" min={3} max={120} defaultValue={slot.intervalSec} />
+                      </label>
+                      <label className="field">
+                        <span>Urutan kartu</span>
+                        <select name="orderMode" defaultValue={slot.orderMode}>
+                          <option value="sequential">Ikuti urutan daftar</option>
+                          <option value="random">Acak</option>
+                        </select>
+                      </label>
+                      <label className="field field--check">
+                        <span>Aktif</span>
+                        <input type="checkbox" name="enabled" value="on" defaultChecked={Boolean(slot.enabled)} />
+                      </label>
+                      <div className="field-grid__actions">
+                        <SubmitButton pendingLabel="Menyimpan">Simpan slot</SubmitButton>
+                      </div>
+                    </form>
+                  </details>
+
+                  <form action={deleteVocabSlot}>
+                    <input type="hidden" name="id" value={slot.id} />
+                    <SubmitButton
+                      pendingLabel="Menghapus"
+                      confirmMessage={`Hapus slot "${slot.title}"? Kalau slot ini sedang tampil, papan langsung berhenti.`}
+                      variant="danger"
+                    >
+                      Hapus
+                    </SubmitButton>
+                  </form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="empty">
+            Belum ada slot. Contoh yang sering dipakai: Halaqah malam, hari Senin sampai Kamis, 21:00 sampai
+            21:15.
+          </p>
+        )}
+      </section>
+
+      <section className="panel" id="manual">
+        <div className="panel__head">
+          <h2>Kendali manual</h2>
+          <p>
+            Untuk waktu di luar jadwal, misalnya hafalan dadakan. Slot harus berstatus aktif dan mode putar
+            Manual.
+          </p>
+        </div>
+
+        {manualSlots.length ? (
+          <ul className="rows">
+            {manualSlots.map((slot) => {
+              const isLive = live?.slotId === slot.id;
+              return (
+                <li key={slot.id} className="row">
+                  <div className="row__body">
+                    <div className="row__title">
+                      <strong>{slot.title}</strong>
+                      <span className="tag" data-off={isLive ? undefined : 'true'}>
+                        {isLive ? 'Sedang tampil' : 'Belum tampil'}
+                      </span>
+                    </div>
+                    <p className="row__meta">
+                      Kartu {(isLive ? live.index : 0) + 1} dari {items.length}, jam {slot.start} sampai {slot.end}
+                    </p>
+                  </div>
+
+                  <div className="row__actions">
+                    <form action={stepManualVocab}>
+                      <input type="hidden" name="slotId" value={slot.id} />
+                      <input type="hidden" name="direction" value="prev" />
+                      <button
+                        type="submit"
+                        className="btn btn--quiet"
+                        aria-label={`Tampilkan kartu sebelumnya di ${slot.title}`}
+                      >
+                        Sebelumnya
+                      </button>
+                    </form>
+                    <form action={stepManualVocab}>
+                      <input type="hidden" name="slotId" value={slot.id} />
+                      <input type="hidden" name="direction" value="next" />
+                      <button
+                        type="submit"
+                        className="btn btn--quiet"
+                        aria-label={`Tampilkan kartu berikutnya di ${slot.title}`}
+                      >
+                        Berikutnya
+                      </button>
+                    </form>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="empty">
+            Tidak ada slot manual yang aktif. Ubah mode putar salah satu slot di atas menjadi Manual dan
+            centang Aktif.
+          </p>
+        )}
+
+        {live ? (
+          <form action={stopManualVocab} className="field-grid">
+            <div className="field-grid__actions">
+              <SubmitButton pendingLabel="Menghentikan" variant="danger">
+                Hentikan tampilan manual
+              </SubmitButton>
+            </div>
+          </form>
+        ) : null}
+      </section>
     </main>
   );
 }

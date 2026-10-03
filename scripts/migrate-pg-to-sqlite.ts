@@ -60,7 +60,7 @@ async function main() {
   const db = getDb();
   const counters = blank();
 
-  // 1. settings — PG menimpa key yang sama
+  // 1. settings: PG menimpa key yang sama
   const pgSettings = await readTable<{ key: string; value: string }>(sql, 'settings', 'SELECT key, value FROM settings');
   if (!DRY_RUN) {
     const upsert = db.prepare(
@@ -74,7 +74,7 @@ async function main() {
     counters.settings.merged = pgSettings.length;
   }
 
-  // 2. events — dedupe (title, day, start)
+  // 2. events: dedupe (title, day, start)
   const pgEvents = await readTable<{ title: string; day: string; start: string; end_time: string | null; sound_url: string | null; note: string | null }>(
     sql, 'events', 'SELECT title, day, start, end_time, sound_url, note FROM events',
   );
@@ -89,7 +89,7 @@ async function main() {
     if (!DRY_RUN) insertEvent.run(row.title, row.day, row.start, row.end_time, row.sound_url, row.note);
   }
 
-  // 3. mufrodat — dedupe (arabic, translation)
+  // 3. mufrodat: dedupe (arabic, translation)
   const pgMufrodat = await readTable<{ arabic: string; translation: string }>(
     sql, 'mufrodat', 'SELECT arabic, translation FROM mufrodat',
   );
@@ -104,7 +104,7 @@ async function main() {
     if (!DRY_RUN) insertMufrodat.run(row.arabic, row.translation);
   }
 
-  // 4. ticker_items — dedupe (text)
+  // 4. ticker_items: dedupe (text)
   const pgTicker = await readTable<{ text: string }>(sql, 'ticker_items', 'SELECT text FROM ticker_items ORDER BY sort_order ASC, id ASC');
   const hasTicker = db.prepare('SELECT 1 FROM ticker_items WHERE text = ? LIMIT 1');
   const maxSort = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM ticker_items').get() as { m: number };
@@ -119,7 +119,7 @@ async function main() {
     if (!DRY_RUN) insertTicker.run(row.text, nextSort++);
   }
 
-  // 5. event_sounds — upsert by original_name (termasuk BLOB audio)
+  // 5. event_sounds: upsert by original_name (termasuk BLOB audio)
   const pgSounds = await readTable<{ original_name: string; mime_type: string; file_ext: string; size_bytes: number; audio_data: Buffer }>(
     sql, 'event_sounds', 'SELECT original_name, mime_type, file_ext, size_bytes, audio_data FROM event_sounds',
   );
@@ -138,7 +138,7 @@ async function main() {
     }
   }
 
-  // 6. mufrodat_videos — metadata saja (file fisik harus dicopy manual, lihat pesan di bawah)
+  // 6. mufrodat_videos: metadata saja (file fisik harus dicopy manual, lihat pesan di bawah)
   const pgVideos = await readTable<{ original_name: string; relative_path: string; mime_type: string; size_bytes: number; sort_order: number }>(
     sql, 'mufrodat_videos', 'SELECT original_name, relative_path, mime_type, size_bytes, sort_order FROM mufrodat_videos ORDER BY sort_order ASC, id ASC',
   );
@@ -172,7 +172,7 @@ async function main() {
     console.log(`  ${table}: ${c.merged} digabung, ${c.skipped} sudah ada (dilewati)`);
   }
   if (missingFiles.length) {
-    console.log('\nFile video ini tercatat di DB tapi belum ada di assets/ — copy manual ke folder yang sama:');
+    console.log('\nFile video ini tercatat di DB tapi belum ada di assets/. Copy manual ke folder yang sama:');
     for (const file of missingFiles) console.log(`  - assets/${file}`);
   }
   if (DRY_RUN) console.log('\nDry run selesai, tidak ada yang ditulis.');

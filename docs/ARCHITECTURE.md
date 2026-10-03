@@ -28,8 +28,8 @@ Komponen overlay client yang poll sendiri:
 
 ## Modul penting
 
-- `lib/db.ts` — satu-satunya pintu SQLite. Tambah tabel baru di `bootstrapDatabase()`, tambah getter di sini.
-- `lib/vocab.ts` — logika jadwal murni (dipakai server + client). Uji via `npx tsx` bila diubah.
-- `lib/vocab-live.ts` — file JSON atomik untuk live manual.
-- `lib/prayer.ts`, `lib/weather.ts` — fetch eksternal + cache. Jangan turunkan timeout di bawah 2,5 dtk (internet lambat).
-- `lib/media.ts` — resolver `/assets/...`. Aset display wajib lokal di `assets/`.
+- `lib/db.ts`: satu-satunya pintu SQLite. Tambah tabel baru di `bootstrapDatabase()`, tambah getter di sini.
+- `lib/vocab.ts`: logika jadwal murni (dipakai server + client). Uji via `npx tsx` bila diubah.
+- `lib/vocab-live.ts`: file JSON atomik untuk live manual.
+- `lib/prayer.ts`, `lib/weather.ts`: fetch eksternal + cache. Jangan turunkan timeout di bawah 2,5 dtk (internet lambat).
+- `lib/media.ts`: resolver `/assets/...`. Aset display wajib lokal di `assets/`.

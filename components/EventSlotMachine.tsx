@@ -17,8 +17,6 @@ type PlayCallbacks = {
   onBlocked: () => void;
 };
 
-const AUDIO_UNLOCKED_KEY = 'clock-audio-unlocked';
-
 function playAudioWithFallback(audio: HTMLAudioElement, callbacks: PlayCallbacks) {
   try {
     const playPromise = audio.play();
@@ -32,34 +30,27 @@ function playAudioWithFallback(audio: HTMLAudioElement, callbacks: PlayCallbacks
   }
 }
 
-function formatDayLabel(day: string) {
-  const map: Record<string, string> = {
-    senin: 'Monday',
-    selasa: 'Tuesday',
-    rabu: 'Wednesday',
-    kamis: 'Thursday',
-    jumat: 'Friday',
-    sabtu: 'Saturday',
-    minggu: 'Sunday',
-  };
-
-  return map[day.toLowerCase()] ?? day.charAt(0).toUpperCase() + day.slice(1);
+function formatEventTime(event: EventItem) {
+  return event.endTime ? `${event.start}–${event.endTime}` : `starts ${event.start}`;
 }
 
 function EventCard({ event }: { event: EventItem }) {
   return (
-    <div className="info-card event-slot__card">
-      <div className="info-card__top">
-        <strong>{event.title}</strong>
-        <span>{formatDayLabel(event.day)}</span>
-      </div>
-      <div className="info-card__bottom">
-        <span>
-          {event.start}
-          {event.endTime ? ` - ${event.endTime}` : ''}
-        </span>
-        {event.note ? <p>{event.note}</p> : null}
-      </div>
+    <div className="event-now">
+      <strong className="event-now__title">{event.title}</strong>
+      <span className="event-now__time">{formatEventTime(event)}</span>
+      {event.note ? <p className="event-now__note">{event.note}</p> : null}
+    </div>
+  );
+}
+
+function UpcomingCard({ event }: { event: EventItem }) {
+  return (
+    <div className="event-next">
+      <span className="event-next__label">Up next</span>
+      <span className="event-next__value">
+        {event.title} at {event.start}
+      </span>
     </div>
   );
 }
@@ -143,22 +134,6 @@ export function EventSlotMachine({ events, soundUrl }: { events: EventItem[]; so
   const pendingAudioPlayRef = useRef(false);
 
   useEffect(() => {
-    const markAudioUnlocked = () => {
-      window.localStorage.setItem(AUDIO_UNLOCKED_KEY, '1');
-    };
-
-    window.addEventListener('pointerdown', markAudioUnlocked, { passive: true });
-    window.addEventListener('keydown', markAudioUnlocked);
-    window.addEventListener('touchstart', markAudioUnlocked, { passive: true });
-
-    return () => {
-      window.removeEventListener('pointerdown', markAudioUnlocked);
-      window.removeEventListener('keydown', markAudioUnlocked);
-      window.removeEventListener('touchstart', markAudioUnlocked);
-    };
-  }, []);
-
-  useEffect(() => {
     const intervalId = window.setInterval(() => {
       setNow(new Date());
     }, 15_000);
@@ -168,6 +143,19 @@ export function EventSlotMachine({ events, soundUrl }: { events: EventItem[]; so
 
   const currentEvent = getActiveEvent(orderedEvents, now);
   const currentEventKey = currentEvent ? `${String(currentEvent.id)}-${currentEvent.start}` : '';
+
+  const nextEvent = useMemo(() => {
+    if (currentEvent) {
+      return null;
+    }
+    const nowMinutes = getJakartaCurrentMinutes(now);
+    return (
+      orderedEvents.find((event) => {
+        const startMinutes = toMinutes(event.start);
+        return startMinutes !== null && startMinutes > nowMinutes;
+      }) ?? null
+    );
+  }, [currentEvent, now, orderedEvents]);
 
   useEffect(() => {
     const retryPendingAudio = () => {
@@ -253,7 +241,14 @@ export function EventSlotMachine({ events, soundUrl }: { events: EventItem[]; so
   }, []);
 
   if (!currentEvent) {
-    return <p className="fallback-note">No active event at this time.</p>;
+    if (nextEvent) {
+      return (
+        <div className="event-slot">
+          <UpcomingCard event={nextEvent} />
+        </div>
+      );
+    }
+    return <p className="fallback-note">No events scheduled today.</p>;
   }
 
   return (

@@ -12,7 +12,10 @@
 - `GET /api/mufrodat-video/state` → `{ ok, videoUrl, playbackNonce }`. Pada slot jadwal
   yang terpukul, sekaligus mengunci slot (5 settings ditulis) agar tiap slot memutar 1 video.
 - `POST /api/mufrodat-video/ack` body `{ playbackNonce }` → membersihkan state setelah diputar.
-- `POST /api/mufrodat-video/upload-legacy` → form upload + trigger putar sekali (redirect ke `/admin?notice=`).
+
+Upload video tidak lewat HTTP route. Dua server action di `/admin` (tambah ke playlist
+dan putar sekali sekarang) menulis file ke `assets/videos/mufrodat/`, lalu mengisi
+state di atas supaya display langsung mengambilnya.
 
 ## Suara event
 

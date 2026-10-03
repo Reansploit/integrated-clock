@@ -1,4 +1,4 @@
-# clock2 – Display Boarding School (Next.js + SQLite lokal)
+# clock2 - Display Boarding School (Next.js + SQLite lokal)
 
 Dashboard fullscreen untuk display: jam, jadwal sholat, kegiatan hari ini, vocab,
 teks berjalan, video terjadwal, dan live announcement. Satu PC, satu file database
