@@ -1,22 +1,187 @@
-[
-  {
-    "title": "Morning Study",
-    "day": "senin",
-    "start": "05:15",
-    "end": "06:00",
-    "note": "Routine Monday session"
-  },
-  {
-    "title": "Youth Tahsin",
-    "day": "rabu",
-    "start": "19:30",
-    "end": "20:45",
-    "note": "Main hall"
-  },
-  {
-    "tittle": "Friday Charity",
-    "day": "jumat",
-    "start": "13:00",
-    "end": "14:00"
-  }
-]
+[senin]
+02:50-03:00 prepare
+03:00-04:00 tahajjud
+04:00-05:00 shubuh
+05:00-06:00 Halaqoh
+06:00-07:00 Free Time
+07:00-07:30 Ceremony
+07:30-08:15 KBM 1
+08:15-09:00 KBM 2
+09:00-09:30 Break time
+09:30-10:15 KBM 3
+10:15-11:00 KBM 4
+11:00-11:55 Qoilulah
+11:55-12:30 dzuhur
+12:30-13:00 Break Time
+13:00-13:45 KBM 5
+13:45-14:30 KBM 6
+14:30-15:00 Prepare
+15:00-15:30 Ashar
+15:30-16:30 Free Time
+16:30-17:00 Prepare
+17:00-18:30 Halaqoh
+18:30-19:00 Dinner
+19:00-19:30 Isya'
+19:30-20:30 Study
+20:30-21:00 Free Time
+21:00-23:59 sleep
+
+[selasa]
+02:50-03:00 prepare
+03:00-04:00 tahajjud
+04:00-05:00 shubuh
+05:00-06:00 Halaqoh
+06:00-07:00 Free Time
+07:00-07:30 Ceremony
+07:30-08:15 KBM 1
+08:15-09:00 KBM 2
+09:00-09:30 Break time
+09:30-10:15 KBM 3
+10:15-11:00 KBM 4
+11:00-11:55 Qoilulah
+11:55-12:30 dzuhur
+12:30-13:00 Lunch
+13:00-13:45 KBM 5
+13:45-14:30 KBM 6
+14:30-15:00 Prepare
+15:00-15:30 Ashar
+15:30-16:30 Free Time
+16:30-17:00 Prepare
+17:00-18:30 Halaqoh
+18:30-19:00 Dinner
+19:00-19:30 Isya'
+19:30-20:30 Study
+20:30-21:00 Free Time
+21:00-23:59 sleep
+
+[rabu]
+02:50-03:00 prepare
+03:00-04:00 tahajjud
+04:00-05:00 shubuh
+05:00-06:00 Halaqoh
+06:00-07:00 Free Time
+07:00-07:30 Ceremony
+07:30-08:15 KBM 1
+08:15-09:00 KBM 2
+09:00-09:30 Break time
+09:30-10:15 KBM 3
+10:15-11:00 KBM 4
+11:00-11:55 Qoilulah
+11:55-12:30 dzuhur
+12:30-13:00 Lunch
+13:00-13:45 KBM 5
+13:45-14:30 KBM 6
+14:30-15:00 Prepare
+15:00-15:30 Ashar
+15:30-16:30 Free Time
+16:30-17:00 Prepare
+17:00-18:30 Halaqoh
+18:30-19:00 Dinner
+19:00-19:30 Isya'
+19:30-20:30 Study
+20:30-21:00 Free Time
+21:00-23:59 sleep
+
+[kamis]
+02:50-03:00 prepare
+03:00-04:00 tahajjud
+04:00-05:00 shubuh
+05:00-06:00 Halaqoh
+06:00-07:00 Free Time
+07:00-07:30 Ceremony
+07:30-08:15 KBM 1
+08:15-09:00 KBM 2
+09:00-09:30 Break time
+09:30-10:15 KBM 3
+10:15-11:00 KBM 4
+11:00-11:55 Qoilulah
+11:55-12:30 dzuhur
+12:30-13:00 Break Time
+13:00-13:45 KBM 5
+13:45-14:30 KBM 6
+14:30-15:00 Prepare
+15:00-15:30 Ashar
+15:30-16:30 Free Time
+16:30-17:00 Prepare
+17:00-18:30 Halaqoh
+18:30-19:00 Dinner
+19:00-19:30 Isya'
+19:30-20:30 Study
+20:30-21:00 Free Time
+21:00-23:59 sleep
+
+[jum'at]
+03:00-04:00 tahajjud
+04:00-05:00 shubuh
+05:00-06:00 Ta'lim
+06:00-07:15 Clean
+07:15-10:30 Prepare
+10:30-11:24 Prepare
+11:24-12:30 Lunch
+12:30-14:30 Free Time
+14:30-15:00 Prepare
+15:00-15:30 Ashar
+15:30-16:30 Free Time
+16:30-17:00 Prepare
+17:00-18:30 Halaqoh
+18:30-19:00 Dinner
+19:00-19:30 Isya'
+19:30-20:30 Study
+20:30-21:00 Free Time
+21:00-23:59 sleep
+
+[sabtu]
+02:50-03:00 prepare
+03:00-04:00 tahajjud
+04:00-05:00 shubuh
+05:00-06:00 Halaqoh
+06:00-07:00 Free Time
+07:00-07:30 Ceremony
+07:30-08:15 KBM 1
+08:15-09:00 KBM 2
+09:00-09:30 Break time
+09:30-10:15 KBM 3
+10:15-11:00 KBM 4
+11:00-11:55 Qoilulah
+11:55-12:30 dzuhur
+12:30-13:00 Lunch
+13:00-13:45 KBM 5
+13:45-14:30 KBM 6
+14:30-15:00 Prepare
+15:00-15:30 Ashar
+15:30-16:30 Free Time
+16:30-17:00 Prepare
+17:00-18:30 Halaqoh
+18:30-19:00 Dinner
+19:00-19:30 Isya'
+19:30-20:30 Study
+20:30-21:00 Free Time
+21:00-23:59 sleep
+
+[minggu]
+02:50-03:00 prepare
+03:00-04:00 tahajjud
+04:00-05:00 shubuh
+05:00-06:00 Halaqoh
+06:00-07:00 Free Time
+07:00-07:30 Ceremony
+07:30-08:15 KBM 1
+08:15-09:00 KBM 2
+09:00-09:30 Break time
+09:30-10:15 KBM 3
+10:15-11:00 KBM 4
+11:00-11:55 Qoilulah
+11:55-12:30 dzuhur
+12:30-13:00 Lunch
+13:00-13:45 KBM 5
+13:45-14:30 KBM 6
+14:30-15:00 Prepare
+15:00-15:30 Ashar
+15:30-16:30 Free Time
+16:30-17:00 Prepare
+17:00-18:30 Halaqoh
+18:30-19:00 Dinner
+19:00-19:30 Isya'
+19:30-20:30 Study
+20:30-21:00 Free Time
+21:00-23:59 sleep
