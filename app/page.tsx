@@ -79,14 +79,12 @@ export default async function Home() {
   const resolvedBackgroundImageUrl = resolveAssetUrl(data.settings.backgroundImageUrl, ['backgrounds']);
   const backgroundImageUrl = resolvedBackgroundImageUrl || backgroundCandidates[0] || '';
 
-  // The board sits on a photo the operator uploads, so the scrim is set from the
-  // worst case: a pure white background. At 0.86 the brightest pixel left under
-  // the text still clears 4.5:1 for muted copy on the solid surfaces. The photo
-  // itself never sits as a permanent backdrop: the peek layer below hides it
-  // and only lets it through faded, five seconds out of every twenty.
+  // The board sits on a photo the operator uploads. During the peek the photo
+  // dominates: only a light scrim stays on so the wall clock keeps a ghost of
+  // backing. The owner explicitly accepted the contrast cost for a sunlit room.
   const wallpaperStyle = backgroundImageUrl
     ? {
-        backgroundImage: `linear-gradient(rgba(5, 10, 18, 0.86), rgba(5, 10, 18, 0.9)), url(${backgroundImageUrl})`,
+        backgroundImage: `linear-gradient(rgba(5, 10, 18, 0.3), rgba(5, 10, 18, 0.4)), url(${backgroundImageUrl})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
