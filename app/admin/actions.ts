@@ -503,6 +503,19 @@ export async function clearBackgroundImage(formData: FormData) {
   }, formData);
 }
 
+const languageWeekSchema = z.object({
+  languageWeek: z.enum(['arab', 'english']),
+});
+
+export async function saveLanguageWeek(formData: FormData) {
+  return guard('mufrodat', 'language-week-saved', () => {
+    requireDatabase();
+
+    const values = readForm(languageWeekSchema, formData, ['languageWeek']);
+    writeSettings(values);
+  }, formData);
+}
+
 function writeSettings(values: Record<string, string>) {
   const db = getDb();
   for (const [key, value] of Object.entries(values)) {

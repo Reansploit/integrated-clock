@@ -714,6 +714,31 @@ select {
   letter-spacing: 0.04em;
 }
 
+/* Week flag above the vocabulary list: the flag, then the week name under it.
+   The Arabic caption reads in the Arabic face; the English one in the frame
+   sans like every other small label. */
+.week-flag {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.week-flag__flag {
+  height: 2rem;
+  border-radius: 4px;
+}
+
+.week-flag__caption {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.week-flag__caption[lang='ar'] {
+  font-family: var(--font-noto-sans-arabic), sans-serif;
+  font-size: 1rem;
+}
+
 .translation-line {
   color: var(--muted);
 }

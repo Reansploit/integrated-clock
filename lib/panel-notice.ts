@@ -62,6 +62,7 @@ const notices: Record<string, PanelNotice> = {
   },
   'background-no-file': { tone: 'error', text: 'Belum ada file gambar yang dipilih.' },
   'background-cleared': { tone: 'ok', text: 'Gambar latar dilepas. Papan kembali ke warna gelap bawaan.' },
+  'language-week-saved': { tone: 'ok', text: 'Minggu bahasa tersimpan. Kotak kosakata di papan ikut berubah.' },
   'background-write-failed': { tone: 'error', text: 'Gambar gagal ditulis ke disk. Lihat log terminal untuk detailnya.' },
 
   'vocab-item-added': { tone: 'ok', text: 'Kartu vocab ditambahkan.' },

@@ -9,6 +9,7 @@ import {
   playMufrodatVideoOnce,
   saveCitySettings,
   saveDisplaySettings,
+  saveLanguageWeek,
   saveMufrodatVideoSettings,
   saveTicker,
   stopMufrodatVideoPlayback,
@@ -642,6 +643,21 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           <h2>Mufrodat</h2>
           <p>Daftar kata Arab yang bergantian di kotak kanan bawah papan.</p>
         </div>
+
+        <form action={saveLanguageWeek} className="field-grid">
+          <input type="hidden" name="page" value={currentPage} />
+          <label className="field">
+            <span>Minggu bahasa</span>
+            <select name="languageWeek" defaultValue={data.settings.languageWeek}>
+              <option value="arab">Arab — bendera Saudi, tulisan أسبوع العربية</option>
+              <option value="english">Inggris — bendera British, tulisan english week</option>
+            </select>
+            <small>Bendera dan tulisan tampil di atas daftar kata di kotak kosakata papan.</small>
+          </label>
+          <div className="field-grid__actions">
+            <SubmitButton pendingLabel="Menyimpan">Simpan minggu bahasa</SubmitButton>
+          </div>
+        </form>
 
         <form action={createMufrodat} className="field-grid">
           <input type="hidden" name="page" value={currentPage} />

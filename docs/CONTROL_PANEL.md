@@ -60,6 +60,13 @@ tidak memutar ulang.
 Browser bisa memblokir playback otomatis. Kalau terblokir, bunyi menunggu
 sampai ada klik atau tombol ditekan di halaman papan, lalu diputar ulang sekali.
 
+## Mufrodat: minggu bahasa
+
+Pilihan di bagian Mufrodat menentukan bendera dan tulisan di atas daftar kata
+di kotak kosakata papan: minggu Arab (🇸🇦 + أسبوع العربية) atau minggu Inggris
+(🇬🇧 + english week). Tersimpan seperti pengaturan lain, jadi papan ikut
+berubah sendiri setelah simpan.
+
 ## Kosakata: kartu
 
 Satu baris = satu kartu. Urutan baris di daftar ikut dipakai saat mode putar

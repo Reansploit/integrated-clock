@@ -73,6 +73,7 @@ export type DashboardSettings = {
   cityId: string;
   eventSoundUrl: string;
   backgroundImageUrl: string;
+  languageWeek: 'arab' | 'english';
   mufrodatVideoUrl: string;
   mufrodatVideoPlaybackNonce: string;
   mufrodatVideoPlaybackRequestedAt: string;
@@ -94,6 +95,7 @@ const defaultSettings: SettingRow[] = [
   { key: 'cityId', value: '1608' },
   { key: 'eventSoundUrl', value: '' },
   { key: 'backgroundImageUrl', value: '' },
+  { key: 'languageWeek', value: 'arab' },
   { key: 'mufrodatVideoUrl', value: '' },
   { key: 'mufrodatVideoPlaybackNonce', value: '' },
   { key: 'mufrodatVideoPlaybackRequestedAt', value: '' },
@@ -389,6 +391,7 @@ function getDefaultDashboardSettings(): DashboardSettings {
     cityId: '1608',
     eventSoundUrl: '',
     backgroundImageUrl: '',
+    languageWeek: 'arab',
     mufrodatVideoUrl: '',
     mufrodatVideoPlaybackNonce: '',
     mufrodatVideoPlaybackRequestedAt: '',
@@ -409,6 +412,7 @@ export function getSettings(): DashboardSettings {
     cityId: map.get('cityId') || '1608',
     eventSoundUrl: map.get('eventSoundUrl') || '',
     backgroundImageUrl: map.get('backgroundImageUrl') || '',
+    languageWeek: map.get('languageWeek') === 'english' ? 'english' : 'arab',
     mufrodatVideoUrl: map.get('mufrodatVideoUrl') || '',
     mufrodatVideoPlaybackNonce: map.get('mufrodatVideoPlaybackNonce') || '',
     mufrodatVideoPlaybackRequestedAt: map.get('mufrodatVideoPlaybackRequestedAt') || '',
