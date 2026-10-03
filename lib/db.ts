@@ -202,6 +202,10 @@ function bootstrapDatabase() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
@@ -350,6 +354,29 @@ export function upsertSetting(key: string, value: string) {
   getDb()
     .prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
     .run(key, value);
+}
+
+/**
+ * Board revision: bumped once per successful console write. The wall board
+ * polls it and reloads itself when it moves, so no operator action on the
+ * board tab is needed after a save. A counter, not a timestamp: two quick
+ * saves in the same second must still count as two changes.
+ */
+export function getRevision(): number {
+  ensureDatabase();
+  const row = getDb().prepare("SELECT value FROM meta WHERE key = 'boardRevision'").get() as
+    | { value: string }
+    | undefined;
+  const revision = Number.parseInt(row?.value ?? '0', 10);
+  return Number.isFinite(revision) && revision >= 0 ? revision : 0;
+}
+
+export function bumpRevision(): number {
+  const next = getRevision() + 1;
+  getDb()
+    .prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+    .run('boardRevision', String(next));
+  return next;
 }
 
 function getDefaultSettingValue(key: string) {

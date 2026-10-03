@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { unstable_rethrow } from 'next/navigation';
 import { z } from 'zod';
 
-import { ensureDatabase, getDb } from '@/lib/db';
+import { bumpRevision, ensureDatabase, getDb } from '@/lib/db';
 import { describeIssues, panelRedirect } from '@/lib/panel-notice';
 import { parseSlotDays, toMinutes } from '@/lib/vocab';
 import { clearVocabLive, getVocabLive, setVocabLive } from '@/lib/vocab-live';
@@ -62,6 +62,7 @@ async function guard(anchor: string, success: string, work: () => Promise<void> 
 
   revalidatePath('/');
   revalidatePath(VOCAB_PATH);
+  bumpRevision();
   back(success, anchor);
 }
 

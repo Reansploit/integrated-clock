@@ -19,6 +19,7 @@ import {
 } from './actions';
 
 import { AdminAnnouncementControl } from '@/components/AdminAnnouncementControl';
+import { EventPager } from '@/components/EventPager';
 import { SubmitButton } from '@/components/SubmitButton';
 import { getDashboardData } from '@/lib/dashboard';
 import { getDbWriteInfo } from '@/lib/db';
@@ -204,8 +205,6 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const totalEventPages = Math.max(1, Math.ceil(data.events.length / EVENTS_PER_PAGE));
   const requestedPage = Number.parseInt(String(params.page || '1'), 10);
   const currentPage = Number.isFinite(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, totalEventPages) : 1;
-  const startIndex = (currentPage - 1) * EVENTS_PER_PAGE;
-  const pageEvents = data.events.slice(startIndex, startIndex + EVENTS_PER_PAGE);
 
   const announcementToken =
     process.env.ANNOUNCEMENT_ADMIN_TOKEN || process.env.NEXT_PUBLIC_ANNOUNCEMENT_ADMIN_TOKEN || '';
@@ -217,7 +216,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           <h1>Panel admin</h1>
           <p>
             Semua isi papan disimpan di satu file SQLite lokal, <code>{dbWrite?.relativePath ?? 'data/clock.db'}</code>.
-            Setelah menyimpan, tekan F5 di papan untuk melihat hasilnya.
+            Setelah menyimpan, papan memuat ulang sendiri dalam hitungan detik.
           </p>
         </div>
 
@@ -420,7 +419,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           </p>
         </div>
 
-        <form action={createEvent} className="field-grid">
+        <EventPager totalItems={data.events.length} pageSize={EVENTS_PER_PAGE} initialPage={currentPage}>
+          <form action={createEvent} className="field-grid">
           <input type="hidden" name="page" value={currentPage} />
           <label className="field field--span-2">
             <span>Nama kegiatan</span>
@@ -497,9 +497,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           </form>
         </details>
 
-        {pageEvents.length ? (
+        {data.events.length ? (
           <ul className="rows">
-            {pageEvents.map((event) => (
+            {data.events.map((event) => (
               <li key={event.id} className="row">
                 <div className="row__body">
                   <div className="row__title">
@@ -586,31 +586,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           </p>
         )}
 
-        {totalEventPages > 1 ? (
-          <nav className="pager" aria-label="Halaman kegiatan">
-            {currentPage > 1 ? (
-              <a className="btn btn--quiet" href={`/admin?page=${currentPage - 1}#kegiatan`}>
-                Sebelumnya
-              </a>
-            ) : (
-              <span className="btn btn--quiet is-off" aria-hidden="true">
-                Sebelumnya
-              </span>
-            )}
-            <span className="pager__meta">
-              Halaman {currentPage} dari {totalEventPages}
-            </span>
-            {currentPage < totalEventPages ? (
-              <a className="btn btn--quiet" href={`/admin?page=${currentPage + 1}#kegiatan`}>
-                Berikutnya
-              </a>
-            ) : (
-              <span className="btn btn--quiet is-off" aria-hidden="true">
-                Berikutnya
-              </span>
-            )}
-          </nav>
-        ) : null}
+        </EventPager>
       </section>
 
       <section className="panel" id="suara">

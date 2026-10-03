@@ -7,7 +7,7 @@ import { revalidatePath } from 'next/cache';
 import { unstable_rethrow } from 'next/navigation';
 import { z } from 'zod';
 
-import { ensureDatabase, getDb, upsertSetting } from '@/lib/db';
+import { bumpRevision, ensureDatabase, getDb, upsertSetting } from '@/lib/db';
 import { describeIssues, panelRedirect } from '@/lib/panel-notice';
 
 const WEEK_DAYS = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu'] as const;
@@ -157,6 +157,7 @@ async function guard(
 
   revalidatePath('/');
   revalidatePath('/admin');
+  bumpRevision();
   back(success, anchor, detail, formData);
 }
 

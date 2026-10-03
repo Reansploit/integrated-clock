@@ -22,6 +22,6 @@ Display dirancang jalan penuh tanpa internet setelah build pertama.
 
 ## Darurat
 
-- Display macet: reload browser (auto-reload tiap 1 jam juga aktif).
+- Display macet: reload browser (auto-reload tiap 30 menit juga aktif).
 - Jadwal sholat basi > 7 hari: tampil kosong; sambungkan internet sebentar lalu reload.
 - DB corrupt: restore salinan `data/clock.db`, atau hapus file dan jalankan `npm run db:init` (kembali ke bawaan).

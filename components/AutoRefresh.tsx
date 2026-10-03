@@ -4,9 +4,10 @@ import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 
 /**
- * The display reloads itself every five minutes so schedule, prayer, and slot
- * changes reach the wall without anyone touching it. Only the board: a reload
- * on /admin would throw away a form the operator is halfway through filling in.
+ * The display reloads itself every thirty minutes as a backstop. Day-to-day
+ * updates arrive faster: every console save bumps the board revision and the
+ * RevisionWatcher reloads within seconds. Only the board: a reload on /admin
+ * would throw away a form the operator is halfway through filling in.
  */
 export function AutoRefresh() {
   const pathname = usePathname();
@@ -16,7 +17,7 @@ export function AutoRefresh() {
 
     const timer = window.setInterval(() => {
       window.location.reload();
-    }, 300_000);
+    }, 1_800_000);
 
     return () => window.clearInterval(timer);
   }, [pathname]);

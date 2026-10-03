@@ -23,6 +23,7 @@ dihapus manual; tidak ada kode yang membacanya lagi.
 ## File transient (bukan tabel)
 
 - `data/vocab-live.json`: `{ slotId, index, nonce, updatedAt }` untuk mode manual. Ditulis dari `/control/vocab` dan `POST /api/vocab/manual`.
+- `meta(key PK, value)`: counter `boardRevision`, naik 1 tiap tulisan panel yang berhasil. Papan polling lewat `GET /api/revision` dan reload sendiri kalau angkanya bergerak.
 - Memori proses: sesi live announcement. Hilang saat restart, itu disengaja.
 
 ## Backup & restore

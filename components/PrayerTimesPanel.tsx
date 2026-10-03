@@ -138,13 +138,6 @@ export function PrayerTimesPanel({ prayerTimes, initialNextPrayer }: PrayerTimes
           ))}
       </ul>
 
-      <div className="next-prayer">
-        <span className="next-prayer__label">Next prayer</span>
-        <strong className="next-prayer__value">
-          {nextPrayer ? `${nextPrayer.label} ${nextPrayer.time}` : 'No data'}
-        </strong>
-      </div>
-
       {overlayKey ? (
         <div className="adhan-overlay" aria-live="polite">
           <div className="adhan-overlay__kicker">ADHAN TIME</div>

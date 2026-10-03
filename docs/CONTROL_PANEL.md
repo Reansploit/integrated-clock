@@ -30,9 +30,12 @@ diedit tangan tidak bisa menampilkan teks bebas. Nomor halaman ikut lewat input
 tersembunyi `page` di setiap form, karena aksi server tidak tahu operator sedang
 di halaman berapa.
 
-Papan di `/` tidak memuat ulang sendiri. Setelah menyimpan, tekan F5 di
-tab papan. `AutoRefresh` hanya memuat ulang saat tab itu benar-benar sedang
-menampilkan `/`.
+Papan di `/` memuat ulang sendiri maksimal 10 detik setelah setiap simpanan:
+tiap tulisan yang berhasil menaikkan counter revisi di DB, dan
+`RevisionWatcher` di papan mengecek counter itu tiap 10 detik lalu reload
+kalau angkanya bergerak. Reload menunggu video yang sedang tayang atau
+pengumuman yang sedang berjalan sampai selesai dulu. `AutoRefresh` (tiap 30
+menit, hanya saat tab benar-benar menampilkan `/`) tinggal sebagai pengaman.
 
 ## Kegiatan: suara penanda
 

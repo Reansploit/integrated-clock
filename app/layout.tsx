@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { NightAmbientController } from '@/components/NightAmbientController';
 import { AutoRefresh } from '@/components/AutoRefresh';
+import { RevisionWatcher } from '@/components/RevisionWatcher';
+import { getRevision } from '@/lib/db';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -9,7 +11,7 @@ export const metadata: Metadata = {
   description: 'Papan informasi 24 jam di Wonosalam Boarding School.',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: ReactNode;
@@ -19,6 +21,7 @@ export default function RootLayout({
       <body>
         <NightAmbientController />
         <AutoRefresh />
+        <RevisionWatcher initialRevision={getRevision()} />
         {children}
       </body>
     </html>

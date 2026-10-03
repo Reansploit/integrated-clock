@@ -1,36 +1,53 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 /**
- * Running text.
+ * Running text as a three-beat choreography instead of an endless marquee.
  *
- * A marquee only loops cleanly when the distance it travels equals one full
- * copy of its content. The previous version rendered the ticker items, then the
- * running text, then the ticker items again. With three items that produced two
- * halves of different lengths, so translating by 50% landed mid-sequence and
- * the text visibly jumped once per cycle.
- *
- * The track holds two identical groups here and moves exactly one group width,
- * so the seam is invisible. Each group is also repeated until it is at least as
- * wide as the board, otherwise the space after the text scrolls past would show
- * empty background instead of more text.
- *
- * The count comes from measuring the viewport, so the viewport width has to stay
- * independent of the track. `.page-shell` pins its column with `minmax(0, 1fr)`
- * for that reason; without it each measurement asks for more copies, the track
- * grows, and the board walks off the right edge.
+ * Each message takes one beat in turn. The first slides in from the right and
+ * stops in the middle, then falls out the bottom as the second drops in from
+ * the top; the second flips back out up top for the third, which flips in
+ * from below, holds, then walks out toward the end; the stage empties before
+ * the loop restarts. Still beats are five seconds long, measured from a still
+ * stage, so the text reads instead of strobing past.
  */
+type Phase =
+  | 'enterH'
+  | 'hold'
+  | 'flipOut'
+  | 'flipIn'
+  | 'exitH'
+  | 'empty'
+  | 'dropIn'
+  | 'dropOut';
 
-/** Crawl speed in pixels per second, so the motion feels the same on any display. */
-const SPEED_PX_PER_SEC = 42;
+const PHASE_MS: Record<Phase, number> = {
+  enterH: 1100,
+  hold: 5000,
+  flipOut: 550,
+  flipIn: 550,
+  exitH: 2800,
+  empty: 5000,
+  dropIn: 650,
+  dropOut: 650,
+};
 
-/**
- * Copies rendered before measurement. One message on a wide board needs three
- * or four to cover the width, and starting short would show an empty frame
- * before the browser reports its sizes.
- */
-const INITIAL_COPIES = 3;
+const SEQUENCE: Phase[] = [
+  'enterH',
+  'hold',
+  'dropOut',
+  'dropIn',
+  'hold',
+  'flipOut',
+  'flipIn',
+  'hold',
+  'exitH',
+  'empty',
+];
+
+// The next line is already in place when its entrance starts.
+const ADVANCE_ON: Phase[] = ['enterH', 'flipIn', 'dropIn'];
 
 type TickerProps = {
   items: string[];
@@ -38,70 +55,53 @@ type TickerProps = {
 };
 
 export function Ticker({ items, fallback }: TickerProps) {
-  const lines = items.map((line) => line.trim()).filter(Boolean);
-  const messages = lines.length ? lines : [fallback ?? ''].filter(Boolean);
+  const messages = useMemo(() => {
+    const lines = items.map((line) => line.trim()).filter(Boolean);
+    if (lines.length) return lines;
+    const fallbackLine = (fallback ?? '').trim();
+    return fallbackLine ? [fallbackLine] : [];
+  }, [items, fallback]);
 
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const groupRef = useRef<HTMLDivElement>(null);
-  const [copies, setCopies] = useState(INITIAL_COPIES);
-  const [duration, setDuration] = useState(30);
+  const reducedMotion = useMemo(
+    () => typeof window !== 'undefined' && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches),
+    [],
+  );
 
-  const measure = useCallback(() => {
-    const viewport = viewportRef.current;
-    const group = groupRef.current;
-    if (!viewport || !group) {
-      return;
-    }
-
-    const viewportWidth = viewport.getBoundingClientRect().width;
-    if (viewportWidth <= 0) {
-      return;
-    }
-
-    // One copy is already rendered, so measuring the live group gives a real
-    // stride: message widths plus the trailing gap that keeps the seam honest.
-    const measuredGroup = group.getBoundingClientRect().width;
-    if (measuredGroup <= 0) {
-      return;
-    }
-
-    const copiesPerMessage = Math.max(1, group.querySelectorAll('.ticker-item').length);
-    const stride = measuredGroup / copiesPerMessage;
-    const needed = Math.max(1, Math.ceil(viewportWidth / stride));
-
-    setCopies(needed);
-    setDuration(Math.max(16, (needed * stride) / SPEED_PX_PER_SEC));
-  }, []);
+  const [step, setStep] = useState(0);
+  const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    measure();
-
-    const viewport = viewportRef.current;
-    if (!viewport || typeof ResizeObserver === 'undefined') {
-      return;
+    if (!messages.length) return undefined;
+    if (reducedMotion) {
+      const timer = window.setInterval(() => {
+        setIndex((current) => (current + 1) % messages.length);
+      }, 8000);
+      return () => window.clearInterval(timer);
     }
+    const phase = SEQUENCE[step % SEQUENCE.length];
+    const timer = window.setTimeout(() => {
+      const next = (step + 1) % SEQUENCE.length;
+      if (ADVANCE_ON.includes(SEQUENCE[next])) {
+        setIndex((current) => (current + 1) % messages.length);
+      }
+      setStep(next);
+    }, PHASE_MS[phase]);
+    return () => window.clearTimeout(timer);
+  }, [step, messages, reducedMotion]);
 
-    const observer = new ResizeObserver(measure);
-    observer.observe(viewport);
-    return () => observer.disconnect();
-  }, [measure, messages.length]);
+  if (!messages.length) return null;
 
-  const renderMessages = (keyPrefix: string) =>
-    messages.map((message, messageIndex) => (
-      <span className="ticker-item" key={`${keyPrefix}-${messageIndex}`}>
-        {message}
-      </span>
-    ));
+  const phase: Phase = reducedMotion ? 'hold' : SEQUENCE[step % SEQUENCE.length];
+  const message = messages[index % messages.length];
 
   return (
-    <div className="ticker" ref={viewportRef}>
-      <div className="ticker-track" style={{ animationDuration: `${duration}s` }}>
-        <div className="ticker__group" ref={groupRef} aria-hidden="true">
-          {Array.from({ length: copies }, (_, copyIndex) => renderMessages(`a-${copyIndex}`))}
-        </div>
-        <div className="ticker__group" aria-hidden="true">
-          {Array.from({ length: copies }, (_, copyIndex) => renderMessages(`b-${copyIndex}`))}
-        </div>
+    <div className="ticker">
+      <div className="ticker-stage" data-phase={phase}>
+        {phase === 'empty' ? null : (
+          <span key={`${index}-${phase}`} aria-hidden="true" className={`ticker-item ticker-item--${phase}`}>
+            {message}
+          </span>
+        )}
       </div>
     </div>
   );
