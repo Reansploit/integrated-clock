@@ -9,13 +9,13 @@ import { VocabTakeoverOverlay } from '@/components/VocabTakeoverOverlay';
 import { getDashboardData } from '@/lib/dashboard';
 import { getNextPrayer, getPrayerTimes } from '@/lib/prayer';
 import { getWeather } from '@/lib/weather';
-import { listAssetUrls, resolveAssetUrl } from '@/lib/media';
+import { resolveAssetUrl } from '@/lib/media';
 
 export const revalidate = 60;
 
 const gregorianFormatter = new Intl.DateTimeFormat('en-GB', {
   weekday: 'long',
-  day: 'numeric', 
+  day: 'numeric',
   month: 'long',
   year: 'numeric',
   timeZone: 'Asia/Jakarta',
@@ -75,9 +75,9 @@ export default async function Home() {
     return `${day} ${month} ${year} ${era}`.replace(/\s+/g, ' ').trim();
   })();
 
-  const backgroundCandidates = listAssetUrls(['backgrounds'], ['.jpg', '.jpeg', '.png', '.gif', '.webp']);
-  const resolvedBackgroundImageUrl = resolveAssetUrl(data.settings.backgroundImageUrl, ['backgrounds']);
-  const backgroundImageUrl = resolvedBackgroundImageUrl || backgroundCandidates[0] || '';
+  // Clearing the setting clears the wallpaper: no fallback file is picked up,
+  // so Lepas really means gone.
+  const backgroundImageUrl = resolveAssetUrl(data.settings.backgroundImageUrl, ['backgrounds']);
 
   // The board sits on a photo the operator uploads. During the peek the photo
   // dominates: only a light scrim stays on so the wall clock keeps a ghost of
@@ -93,6 +93,12 @@ export default async function Home() {
 
   return (
     <main className="page-shell">
+      <div className="night-frame" aria-hidden="true">
+        <span className="night-frame__edge night-frame__edge--top" />
+        <span className="night-frame__edge night-frame__edge--right" />
+        <span className="night-frame__edge night-frame__edge--bottom" />
+        <span className="night-frame__edge night-frame__edge--left" />
+      </div>
       {wallpaperStyle ? <div className="wallpaper-peek" style={wallpaperStyle} aria-hidden="true" /> : null}
       <MufrodatVideoOverlay src="" playbackNonce="" />
       <LiveAnnouncementOverlay />
@@ -111,7 +117,7 @@ export default async function Home() {
           <ClockStage temp={weather?.temp ?? null} prayerTimes={prayerTimes} />
 
           <div className="board__secondary">
-            <section className="mini-panel">
+            <section className="mini-panel mini-panel--events">
               <h2 className="mini-panel__title">Current Event</h2>
               <EventSlotMachine
                 events={todayEvents}
@@ -119,8 +125,29 @@ export default async function Home() {
               />
             </section>
 
-            <section className="mini-panel">
+            <section className="mini-panel mini-panel--vocab">
               <h2 className="mini-panel__title">Vocabulary</h2>
+              {data.settings.languageWeek === 'english' ? (
+                <div className="week-flag">
+                  <img
+                    className="week-flag__flag"
+                    src="/flag-for-flag-united-kingdom-svgrepo-com.svg"
+                    alt="British flag"
+                  />
+                  <span className="week-flag__caption">english week</span>
+                </div>
+              ) : (
+                <div className="week-flag">
+                  <img
+                    className="week-flag__flag"
+                    src="/flag-for-flag-saudi-arabia-svgrepo-com.svg"
+                    alt="Saudi Arabian flag"
+                  />
+                  <span className="week-flag__caption" dir="rtl" lang="ar">
+                    أسبوع العربية
+                  </span>
+                </div>
+              )}
               <MufrodatFlip items={data.mufrodat} />
             </section>
           </div>
