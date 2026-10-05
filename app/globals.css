@@ -21,12 +21,6 @@
   --font-noto-sans-arabic: 'Noto Sans Arabic', 'Noto Naskh Arabic', Amiri, 'Scheherazade New', Arial, sans-serif;
 }
 
-@property --glow-angle {
-  syntax: '<angle>';
-  initial-value: 0deg;
-  inherits: false;
-}
-
 /* Wall-board faces, shipped with the app in public/fonts so the board needs
    no internet on the LAN. Xirana draws the Latin digits, Markazi Text the
    Arabic-Indic ones. `swap` keeps the first paint from ever going blank. */
@@ -454,7 +448,14 @@ select {
    wall background. */
 .analog-clock__face {
   position: relative;
-  width: min(100%, clamp(280px, 20vw, 480px));
+  /* Definite width first: as a bare percentage of an indefinite grid track the
+     face collapses to zero (seen live at night), so the clamp carries the
+     size and max-width only caps it where there is room. Height mirrors width
+     for TV browsers without aspect-ratio support. */
+  width: clamp(280px, 20vw, 480px);
+  max-width: 100%;
+  height: clamp(280px, 20vw, 480px);
+  max-height: 100%;
   aspect-ratio: 1;
   border-radius: 50%;
 }
@@ -958,46 +959,60 @@ html.night-mode .live-clock {
   align-items: center;
 }
 
-/* Night mode dims the board to stop waking the room, but never below the AA
-   floor. 0.62 composited over black lands at 4.37:1, so it is raised to 0.72. */
+/* Night mode keeps only the clock, at full brightness: this board hangs in a
+   lit open room, not a dark bedroom, and the dimmed version washed out
+   against the glare until only the RGB edge showed. */
 html.night-mode .live-clock__time-main,
 html.night-mode .live-clock__time-seconds {
-  color: rgba(167, 186, 212, 0.72);
+  color: var(--text);
 }
 
 html.night-mode .live-clock__date,
 html.night-mode .adhan-counter__value {
-  color: rgba(167, 186, 212, 0.72);
+  color: var(--muted);
 }
 
 html.night-mode .analog-clock__tick::before {
-  background: rgba(167, 186, 212, 0.26);
+  background: rgba(237, 245, 255, 0.45);
 }
 
 html.night-mode .analog-clock__tick--major::before {
-  background: rgba(167, 186, 212, 0.6);
+  background: rgba(237, 245, 255, 0.9);
 }
 
 /* Owner-kept RGB edge frame: the one decorative loop that survives, scoped to
-   the night frame only (21:00 to 03:00). It marks "the building sleeps, the
-   board keeps watch" and never appears during daytime operation. */
+   the night frame only (21:00 to 03:00). A rainbow wash flows along the
+   edges; the black carve below leaves only an 8px frame of it visible. */
 html.night-mode .page-shell::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: conic-gradient(
-    from var(--glow-angle, 0deg),
-    #ff0040,
-    #ff8000,
-    #ffff00,
-    #00ff80,
-    #0080ff,
-    #8000ff,
-    #ff0040
+  background: linear-gradient(
+    90deg,
+    #ff2400,
+    #e81d1d,
+    #e8b71d,
+    #e3e81d,
+    #1de840,
+    #1ddde8,
+    #2b1de8,
+    #dd00f3,
+    #ff2400
   );
-  animation: nightEdgeGlow 24s linear infinite;
+  background-size: 200% 100%;
+  filter: blur(5px);
+  animation: edgeFlow 20s linear infinite;
   pointer-events: none;
+}
+
+@keyframes edgeFlow {
+  from {
+    background-position: 0% 0;
+  }
+  to {
+    background-position: 100% 0;
+  }
 }
 
 html.night-mode .page-shell::after {
@@ -1012,14 +1027,6 @@ html.night-mode .page-shell::after {
   mask-composite: intersect;
   -webkit-mask-composite: source-in;
   pointer-events: none;
-}
-
-@keyframes nightEdgeGlow {
-  0%   { --glow-angle: 0deg;   opacity: 0.45; }
-  25%  { --glow-angle: 90deg;  opacity: 0.65; }
-  50%  { --glow-angle: 180deg; opacity: 0.85; }
-  75%  { --glow-angle: 270deg; opacity: 0.65; }
-  100% { --glow-angle: 360deg; opacity: 0.45; }
 }
 
 /* ===== VOCAB TAKEOVER: scheduled fullscreen vocabulary (layout: card + vertical clock) ===== */
@@ -1384,7 +1391,10 @@ html.vocab-takeover .ticker {
   }
 
   .analog-clock__face {
-    width: min(100%, 320px);
+    width: 320px;
+    max-width: 100%;
+    height: 320px;
+    max-height: 100%;
   }
 }
 
