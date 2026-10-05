@@ -13,14 +13,6 @@ import { resolveAssetUrl } from '@/lib/media';
 
 export const revalidate = 60;
 
-const gregorianFormatter = new Intl.DateTimeFormat('en-GB', {
-  weekday: 'long',
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-  timeZone: 'Asia/Jakarta',
-});
-
 const hijriFormatter = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura', {
   day: 'numeric',
   month: 'long',
@@ -47,7 +39,6 @@ export default async function Home() {
     }));
 
   const now = new Date();
-  const gregorianDate = gregorianFormatter.format(now);
   // ICU's English Islamic output orders month first ("Rabiʻ II 22, 1448 AH",
   // US order). Readers here expect day first, so the parts are reassembled
   // from formatToParts instead of trusting .format() order. Month names use
@@ -106,15 +97,11 @@ export default async function Home() {
 
       <header className="top-strip">
         <span className="top-strip__brand">Wonosalam Boarding School</span>
-        <div className="top-strip__dates">
-          <span className="date-lockup__gregorian">{gregorianDate}</span>
-          <span className="date-lockup__hijri">{hijriDate}</span>
-        </div>
       </header>
 
       <div className="board">
         <div className="board__main">
-          <ClockStage temp={weather?.temp ?? null} prayerTimes={prayerTimes} />
+          <ClockStage temp={weather?.temp ?? null} prayerTimes={prayerTimes} hijriDate={hijriDate} />
 
           <div className="board__secondary">
             <section className="mini-panel mini-panel--events">

@@ -5,6 +5,16 @@ import { AdhanCountdown } from '@/components/AdhanCountdown';
 import { WeatherBadge } from '@/components/WeatherBadge';
 import type { PrayerTimes } from '@/lib/prayer';
 
+function formatDate(date: Date) {
+  return new Intl.DateTimeFormat('en-GB', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'Asia/Jakarta',
+  }).format(date);
+}
+
 const ARABIC_INDIC_DIGITS = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
 
 function toArabicIndic(value: string) {
@@ -43,9 +53,10 @@ function formatTime(date: Date) {
 type LiveClockProps = {
   temp?: number | null;
   prayerTimes: PrayerTimes | null;
+  hijriDate?: string;
 };
 
-export function LiveClock({ temp, prayerTimes }: LiveClockProps) {
+export function LiveClock({ temp, prayerTimes, hijriDate }: LiveClockProps) {
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -57,6 +68,7 @@ export function LiveClock({ temp, prayerTimes }: LiveClockProps) {
   }, []);
 
   const timeParts = now ? formatTime(now) : { main: '--:--', seconds: '--' };
+  const dateText = now ? formatDate(now) : '';
   // The Gregorian date already lives in the top strip next to the Hijri one,
   // so the clock keeps only the temperature badge beside the time.
   // Odd Jakarta minutes read Arabic-Indic, even minutes Latin: the clock
@@ -91,6 +103,12 @@ export function LiveClock({ temp, prayerTimes }: LiveClockProps) {
         {renderLayer('arabic', !useArabic)}
       </div>
       <div className="live-clock__date">
+        {dateText || hijriDate ? (
+          <span className="live-clock__dates">
+            {dateText ? <span className="live-clock__date-text">{dateText}</span> : null}
+            {hijriDate ? <span className="live-clock__hijri-text">{hijriDate}</span> : null}
+          </span>
+        ) : null}
         <AdhanCountdown prayerTimes={prayerTimes} />
         {temp !== undefined && temp !== null ? <WeatherBadge temp={temp} /> : null}
       </div>
