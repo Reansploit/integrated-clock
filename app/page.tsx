@@ -39,6 +39,35 @@ export default async function Home() {
     }));
 
   const now = new Date();
+
+  // Jakarta midnight today, so staying up late never steals a day from the
+  // countdowns below.
+  const jakartaTodayStart = (() => {
+    const parts = new Map(
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' })
+        .formatToParts(now)
+        .map((part) => [part.type, part.value]),
+    );
+    return Date.UTC(Number(parts.get('year')), Number(parts.get('month')) - 1, Number(parts.get('day')));
+  })();
+
+  // Empty or past dates render as a bare dash: no countdown, no apology text.
+  const countdownText = (isoDate: string) => {
+    const match = isoDate.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return '-';
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const target = Date.UTC(year, month - 1, day);
+    const check = new Date(target);
+    if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) {
+      return '-';
+    }
+    const days = Math.round((target - jakartaTodayStart) / 86_400_000);
+    if (days < 0) return '-';
+    if (days === 0) return 'Today';
+    return days === 1 ? '1 day' : `${days} days`;
+  };
   // ICU's English Islamic output orders month first ("Rabiʻ II 22, 1448 AH",
   // US order). Readers here expect day first, so the parts are reassembled
   // from formatToParts instead of trusting .format() order. Month names use
@@ -101,7 +130,13 @@ export default async function Home() {
 
       <div className="board">
         <div className="board__main">
-          <ClockStage temp={weather?.temp ?? null} prayerTimes={prayerTimes} hijriDate={hijriDate} />
+          <ClockStage
+            temp={weather?.temp ?? null}
+            prayerTimes={prayerTimes}
+            hijriDate={hijriDate}
+            homecoming={countdownText(data.settings.homecomingDate)}
+            exam={countdownText(data.settings.examDate)}
+          />
 
           <div className="board__secondary">
             <section className="mini-panel mini-panel--events">

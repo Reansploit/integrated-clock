@@ -8,6 +8,7 @@ import {
   importEvents,
   playMufrodatVideoOnce,
   saveCitySettings,
+  saveCountdowns,
   saveDisplaySettings,
   saveLanguageWeek,
   saveMufrodatVideoSettings,
@@ -58,6 +59,7 @@ const SECTION_GROUPS = [
       { href: '#ticker', label: 'Teks berjalan' },
       { href: '#sholat', label: 'Kota dan jadwal sholat' },
       { href: '#layar', label: 'Layar dan suara bawaan' },
+      { href: '#hitung', label: 'Hitung mundur' },
     ],
   },
   {
@@ -409,6 +411,31 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             </div>
           </form>
         ) : null}
+      </section>
+
+      <section className="panel" id="hitung">
+        <div className="panel__head">
+          <h2>Hitung mundur</h2>
+          <p>
+            Dua tanggal penghitung di panel jam papan: perpulangan dan ujian. Dihitung mundur dalam hari
+            dari hari ini. Dikosongkan berarti tidak ada tanggal, papan hanya menampilkan strip.
+          </p>
+        </div>
+
+        <form action={saveCountdowns} className="field-grid">
+          <input type="hidden" name="page" value={currentPage} />
+          <label className="field">
+            <span>Tanggal perpulangan</span>
+            <input name="homecomingDate" type="date" defaultValue={data.settings.homecomingDate} />
+          </label>
+          <label className="field">
+            <span>Tanggal ujian</span>
+            <input name="examDate" type="date" defaultValue={data.settings.examDate} />
+          </label>
+          <div className="field-grid__actions">
+            <SubmitButton pendingLabel="Menyimpan">Simpan tanggal</SubmitButton>
+          </div>
+        </form>
       </section>
 
       <section className="panel" id="kegiatan">

@@ -507,11 +507,25 @@ const languageWeekSchema = z.object({
   languageWeek: z.enum(['arab', 'english']),
 });
 
+const countdownSchema = z.object({
+  homecomingDate: z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/, 'format tanggal harus YYYY-MM-DD').max(10),
+  examDate: z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/, 'format tanggal harus YYYY-MM-DD').max(10),
+});
+
 export async function saveLanguageWeek(formData: FormData) {
   return guard('mufrodat', 'language-week-saved', () => {
     requireDatabase();
 
     const values = readForm(languageWeekSchema, formData, ['languageWeek']);
+    writeSettings(values);
+  }, formData);
+}
+
+export async function saveCountdowns(formData: FormData) {
+  return guard('hitung', 'countdown-saved', () => {
+    requireDatabase();
+
+    const values = readForm(countdownSchema, formData, ['homecomingDate', 'examDate']);
     writeSettings(values);
   }, formData);
 }

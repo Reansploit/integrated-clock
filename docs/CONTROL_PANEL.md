@@ -4,7 +4,8 @@ Dua halaman, satu bahasa, satu pola. Keduanya memakai shell yang sama (`.console
 dan pola umpan balik yang sama.
 
 - `/admin`: isi papan, dikelompokkan. Papan: teks berjalan, kota dan jadwal
-  sholat, layar dan suara bawaan. Jadwal: kegiatan. Audio: perpustakaan suara.
+  sholat, layar dan suara bawaan, hitung mundur. Jadwal: kegiatan. Audio:
+  perpustakaan suara.
   Bahasa: mufrodat, video mufrodat, ringkasan kosakata (dikelola di halaman
   sendiri). Siaran: pengumuman langsung.
 - `/control/vocab`: kosakata tayang: kartu, slot jadwal, kendali manual.
@@ -36,6 +37,13 @@ tiap tulisan yang berhasil menaikkan counter revisi di DB, dan
 kalau angkanya bergerak. Reload menunggu video yang sedang tayang atau
 pengumuman yang sedang berjalan sampai selesai dulu. `AutoRefresh` (tiap 30
 menit, hanya saat tab benar-benar menampilkan `/`) tinggal sebagai pengaman.
+
+## Hitung mundur
+
+Dua tanggal di panel jam papan: perpulangan dan ujian, dihitung mundur dalam
+hari dari hari ini (zona Asia/Jakarta). Hari-H tulis `Today`, kemarin tulis
+strip. Kolom dikosongkan berarti tidak ada tanggal, papan hanya menampilkan
+strip tanpa penjelasan.
 
 ## Kegiatan: suara penanda
 

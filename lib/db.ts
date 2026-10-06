@@ -74,6 +74,8 @@ export type DashboardSettings = {
   eventSoundUrl: string;
   backgroundImageUrl: string;
   languageWeek: 'arab' | 'english';
+  homecomingDate: string;
+  examDate: string;
   mufrodatVideoUrl: string;
   mufrodatVideoPlaybackNonce: string;
   mufrodatVideoPlaybackRequestedAt: string;
@@ -96,6 +98,8 @@ const defaultSettings: SettingRow[] = [
   { key: 'eventSoundUrl', value: '' },
   { key: 'backgroundImageUrl', value: '' },
   { key: 'languageWeek', value: 'arab' },
+  { key: 'homecomingDate', value: '' },
+  { key: 'examDate', value: '' },
   { key: 'mufrodatVideoUrl', value: '' },
   { key: 'mufrodatVideoPlaybackNonce', value: '' },
   { key: 'mufrodatVideoPlaybackRequestedAt', value: '' },
@@ -392,6 +396,8 @@ function getDefaultDashboardSettings(): DashboardSettings {
     eventSoundUrl: '',
     backgroundImageUrl: '',
     languageWeek: 'arab',
+    homecomingDate: '',
+    examDate: '',
     mufrodatVideoUrl: '',
     mufrodatVideoPlaybackNonce: '',
     mufrodatVideoPlaybackRequestedAt: '',
@@ -413,6 +419,8 @@ export function getSettings(): DashboardSettings {
     eventSoundUrl: map.get('eventSoundUrl') || '',
     backgroundImageUrl: map.get('backgroundImageUrl') || '',
     languageWeek: map.get('languageWeek') === 'english' ? 'english' : 'arab',
+    homecomingDate: map.get('homecomingDate') || '',
+    examDate: map.get('examDate') || '',
     mufrodatVideoUrl: map.get('mufrodatVideoUrl') || '',
     mufrodatVideoPlaybackNonce: map.get('mufrodatVideoPlaybackNonce') || '',
     mufrodatVideoPlaybackRequestedAt: map.get('mufrodatVideoPlaybackRequestedAt') || '',
