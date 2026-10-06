@@ -78,6 +78,12 @@ stay neutral.
 - Rainbow conic edge glow in night mode kept per explicit owner request. Collides
   with R-01 (rainbow gradients). Scoped to the 21:00 to 03:00 night frame only,
   never in daytime operation.
+- Cyan WebGL smoke on the two countdown tiles kept per explicit owner request
+  (the InfernoCard shader). Collides with R-19 (endless loops) and the board's
+  MOTION 2 rule that every decorative loop is removed. Scoped to countdown tiles
+  that actually hold a date: an unset tile stays static, rendering pauses during
+  night mode while the rail is hidden, and `prefers-reduced-motion` disables it
+  the same way the ticker is disabled.
 
 ## The control console
 

@@ -1,4 +1,5 @@
 import { ClockStage } from '@/components/ClockStage';
+import { CountdownTile } from '@/components/CountdownTile';
 import { EventSlotMachine } from '@/components/EventSlotMachine';
 import { MufrodatFlip } from '@/components/MufrodatFlip';
 import { PrayerTimesPanel } from '@/components/PrayerTimesPanel';
@@ -173,14 +174,8 @@ export default async function Home() {
           <h2 className="rail__title">Prayer Times</h2>
           <PrayerTimesPanel prayerTimes={prayerTimes} initialNextPrayer={nextPrayer} />
           <div className="rail__countdowns">
-            <div className="countdown-tile">
-              <span className="countdown-tile__label">Going Home</span>
-              <span className="countdown-tile__value">{countdownText(data.settings.homecomingDate)}</span>
-            </div>
-            <div className="countdown-tile">
-              <span className="countdown-tile__label">Exam</span>
-              <span className="countdown-tile__value">{countdownText(data.settings.examDate)}</span>
-            </div>
+            <CountdownTile label="Going Home" value={countdownText(data.settings.homecomingDate)} />
+            <CountdownTile label="Exam" value={countdownText(data.settings.examDate)} />
           </div>
         </aside>
       </div>

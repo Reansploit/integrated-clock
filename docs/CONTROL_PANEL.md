@@ -41,10 +41,14 @@ menit, hanya saat tab benar-benar menampilkan `/`) tinggal sebagai pengaman.
 ## Hitung mundur
 
 Dua tanggal di bawah daftar sholat (rail kanan papan): perpulangan dan ujian,
-dihitung mundur dalam
-hari dari hari ini (zona Asia/Jakarta). Hari-H tulis `Today`, kemarin tulis
-strip. Kolom dikosongkan berarti tidak ada tanggal, papan hanya menampilkan
-strip tanpa penjelasan.
+dihitung mundur dalam hari dari hari ini (zona Asia/Jakarta). Hari-H tulis
+`Today`, tanggal yang sudah lewat tulis strip. Kolom dikosongkan berarti tidak
+ada tanggal, papan hanya menampilkan strip tanpa penjelasan.
+
+Tile yang punya tanggal dinyalakan dengan efek asap WebGL cyan (shader dari
+kartu InfernoCard milik owner); tile kosong tetap kartu gelap biasa. Efeknya
+berhenti otomatis saat night mode (rail disembunyikan) dan saat sistem menyetel
+reduced motion.
 
 ## Kegiatan: suara penanda
 

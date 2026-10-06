@@ -249,41 +249,70 @@ select {
   font-size: 0.88rem;
 }
 
-/* The two event countdowns sit under the prayer list as wide rectangles: one
-   horizontal strip each, label left and day count right, so they read as two
-   badges rather than two more schedule rows. */
+/* The two event countdowns sit under the prayer list as wide rectangles rather
+   than more schedule rows; a filled date lights the tile with the cyan smoke. */
 .rail__countdowns {
   display: grid;
-  gap: 8px;
-  margin-top: clamp(10px, 1vw, 16px);
+  gap: clamp(8px, 0.8vw, 12px);
+  margin-top: clamp(12px, 1.2vw, 18px);
 }
 
+/* Text sits at the top; the smoke shader owns the bottom strip. Its burn band
+   fills whatever canvas it gets, so contrast comes from keeping them apart. */
 .countdown-tile {
+  position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  padding: clamp(10px, 0.9vw, 14px) clamp(12px, 1vw, 16px);
+  gap: clamp(12px, 1.2vw, 20px);
+  min-height: clamp(96px, 13vh, 150px);
+  padding: clamp(16px, 1.8vh, 24px) clamp(18px, 1.6vw, 28px);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 14px;
   background: var(--bg-1);
+  overflow: hidden;
   min-width: 0;
 }
 
+/* Bottom 40% only: the shader's own edge fades (uv 0-0.3 and 0.82-0.95) soften
+   both strip ends, so no hard rectangle sits inside the card. */
+.countdown-tile__smoke {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 40%;
+  pointer-events: none;
+}
+
 .countdown-tile__label {
+  position: relative;
+  z-index: 1;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: clamp(0.88rem, 1vw, 1.05rem);
   font-weight: 600;
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
 .countdown-tile__value {
+  position: relative;
+  z-index: 1;
   color: var(--text);
-  font-size: clamp(1rem, 1.5vw, 1.22rem);
+  font-size: clamp(1.4rem, 2.4vw, 2.4rem);
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.15;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+/* Safety halo: the strip stays below the text today, but a shadow keeps the
+   labels legible if the smoke area is ever enlarged. */
+.countdown-tile--live .countdown-tile__label,
+.countdown-tile--live .countdown-tile__value {
+  text-shadow: 0 1px 12px rgba(4, 7, 13, 0.95), 0 0 4px rgba(4, 7, 13, 0.8);
 }
 
 .live-clock {
