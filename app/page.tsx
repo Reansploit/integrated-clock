@@ -130,13 +130,7 @@ export default async function Home() {
 
       <div className="board">
         <div className="board__main">
-          <ClockStage
-            temp={weather?.temp ?? null}
-            prayerTimes={prayerTimes}
-            hijriDate={hijriDate}
-            homecoming={countdownText(data.settings.homecomingDate)}
-            exam={countdownText(data.settings.examDate)}
-          />
+          <ClockStage temp={weather?.temp ?? null} prayerTimes={prayerTimes} hijriDate={hijriDate} />
 
           <div className="board__secondary">
             <section className="mini-panel mini-panel--events">
@@ -178,6 +172,16 @@ export default async function Home() {
         <aside className="rail">
           <h2 className="rail__title">Prayer Times</h2>
           <PrayerTimesPanel prayerTimes={prayerTimes} initialNextPrayer={nextPrayer} />
+          <div className="rail__countdowns">
+            <div className="countdown-tile">
+              <span className="countdown-tile__label">Going Home</span>
+              <span className="countdown-tile__value">{countdownText(data.settings.homecomingDate)}</span>
+            </div>
+            <div className="countdown-tile">
+              <span className="countdown-tile__label">Exam</span>
+              <span className="countdown-tile__value">{countdownText(data.settings.examDate)}</span>
+            </div>
+          </div>
         </aside>
       </div>
 

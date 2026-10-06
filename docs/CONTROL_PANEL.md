@@ -40,7 +40,8 @@ menit, hanya saat tab benar-benar menampilkan `/`) tinggal sebagai pengaman.
 
 ## Hitung mundur
 
-Dua tanggal di panel jam papan: perpulangan dan ujian, dihitung mundur dalam
+Dua tanggal di bawah daftar sholat (rail kanan papan): perpulangan dan ujian,
+dihitung mundur dalam
 hari dari hari ini (zona Asia/Jakarta). Hari-H tulis `Today`, kemarin tulis
 strip. Kolom dikosongkan berarti tidak ada tanggal, papan hanya menampilkan
 strip tanpa penjelasan.

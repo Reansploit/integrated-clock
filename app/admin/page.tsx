@@ -417,7 +417,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
         <div className="panel__head">
           <h2>Hitung mundur</h2>
           <p>
-            Dua tanggal penghitung di panel jam papan: perpulangan dan ujian. Dihitung mundur dalam hari
+            Dua tanggal penghitung di bawah jadwal sholat papan: perpulangan dan ujian. Dihitung mundur dalam hari
             dari hari ini. Dikosongkan berarti tidak ada tanggal, papan hanya menampilkan strip.
           </p>
         </div>

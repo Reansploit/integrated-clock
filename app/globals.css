@@ -249,6 +249,43 @@ select {
   font-size: 0.88rem;
 }
 
+/* The two event countdowns sit under the prayer list as wide rectangles: one
+   horizontal strip each, label left and day count right, so they read as two
+   badges rather than two more schedule rows. */
+.rail__countdowns {
+  display: grid;
+  gap: 8px;
+  margin-top: clamp(10px, 1vw, 16px);
+}
+
+.countdown-tile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: clamp(10px, 0.9vw, 14px) clamp(12px, 1vw, 16px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-1);
+  min-width: 0;
+}
+
+.countdown-tile__label {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.countdown-tile__value {
+  color: var(--text);
+  font-size: clamp(1rem, 1.5vw, 1.22rem);
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
 .live-clock {
   display: flex;
   flex-direction: column;
