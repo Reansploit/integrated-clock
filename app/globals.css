@@ -287,38 +287,41 @@ select {
     0 0 24px rgba(141, 215, 255, 0.4);
 }
 
-/* The plume rises from the card: the mass zone (uv ~0.68-0.775) is the only
-   part of this shader with torn structure, so the bleed puts it right against
-   the top edge and the mask crushes the uniform burn band above it to a
-   ghost - the shader's own floor (minP) otherwise paints that band solid.
-   Sides stop on the clear margin where the edge fade reads zero; the 9px
-   tail below stays in the shader's dim zone, short of the rail's clip. */
+/* The plume rises from the card: the mass zone (uv ~0.54-0.775) is the only
+   part of this shader with torn structure, so a 132px bleed puts ~67px of it
+   against the top edge and the mask walks alpha down through it - hottest at
+   the card, graying upward - until the uniform burn band survives only as a
+   ghost (the shader's own floor, minP, paints that band solid). Sides stop
+   on the clear margin where the edge fade reads zero; the 15px tail below
+   stays under the rail padding's 16px minimum, so the clip never bites. */
 .countdown-tile__smoke {
   position: absolute;
-  top: -70px;
+  top: -132px;
   left: calc(0px - clamp(16px, 1.6vw, 30px));
   z-index: -1;
   display: block;
   width: calc(100% + 2 * clamp(16px, 1.6vw, 30px));
-  height: calc(100% + 79px);
+  height: calc(100% + 147px);
   pointer-events: none;
   -webkit-mask-image: linear-gradient(
     to top,
     #000 0%,
-    #000 68%,
-    rgba(0, 0, 0, 0.75) 72%,
-    rgba(0, 0, 0, 0.4) 77%,
-    rgba(0, 0, 0, 0.14) 82%,
-    transparent 88%
+    #000 60%,
+    rgba(0, 0, 0, 0.75) 68%,
+    rgba(0, 0, 0, 0.45) 74%,
+    rgba(0, 0, 0, 0.18) 80%,
+    rgba(0, 0, 0, 0.08) 86%,
+    transparent 92%
   );
   mask-image: linear-gradient(
     to top,
     #000 0%,
-    #000 68%,
-    rgba(0, 0, 0, 0.75) 72%,
-    rgba(0, 0, 0, 0.4) 77%,
-    rgba(0, 0, 0, 0.14) 82%,
-    transparent 88%
+    #000 60%,
+    rgba(0, 0, 0, 0.75) 68%,
+    rgba(0, 0, 0, 0.45) 74%,
+    rgba(0, 0, 0, 0.18) 80%,
+    rgba(0, 0, 0, 0.08) 86%,
+    transparent 92%
   );
 }
 
