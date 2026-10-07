@@ -255,14 +255,20 @@ select {
   display: grid;
   gap: clamp(8px, 0.8vw, 12px);
   margin-top: clamp(12px, 1.2vw, 18px);
+  /* Floating card: this is the clear rail the smoke ring is allowed to use,
+     and the bottom padding is bleed room before the rail's overflow clip. */
+  margin-inline: clamp(16px, 1.6vw, 30px);
+  padding-bottom: clamp(16px, 2vh, 30px);
 }
 
-/* Text sits at the top; the smoke shader owns the bottom strip. Its burn band
-   fills whatever canvas it gets, so contrast comes from keeping them apart. */
+/* The reference look: smoke circles the card from outside while the card stays
+   a clean opaque panel. Never give this element z-index, transform, filter or
+   opacity - any of those makes it a stacking context and the -1 canvas would
+   flip in front of the card instead of behind it. */
 .countdown-tile {
   position: relative;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: clamp(12px, 1.2vw, 20px);
   min-height: clamp(96px, 13vh, 150px);
@@ -270,26 +276,53 @@ select {
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--bg-1);
-  overflow: hidden;
   min-width: 0;
 }
 
-/* Bottom 40% only: the shader's own edge fades (uv 0-0.3 and 0.82-0.95) soften
-   both strip ends, so no hard rectangle sits inside the card. */
+/* Rim glow hugging the rounded edge, like the reference card. Its blur dies
+   within the clear rail, so the overflow clip never cuts it visibly. */
+.countdown-tile--live {
+  box-shadow:
+    0 0 0 1px rgba(141, 215, 255, 0.3),
+    0 0 24px rgba(141, 215, 255, 0.4);
+}
+
+/* The plume rises from the card: the mass zone (uv ~0.68-0.775) is the only
+   part of this shader with torn structure, so the bleed puts it right against
+   the top edge and the mask crushes the uniform burn band above it to a
+   ghost - the shader's own floor (minP) otherwise paints that band solid.
+   Sides stop on the clear margin where the edge fade reads zero; the 9px
+   tail below stays in the shader's dim zone, short of the rail's clip. */
 .countdown-tile__smoke {
   position: absolute;
-  left: 0;
-  bottom: 0;
-  z-index: 0;
+  top: -70px;
+  left: calc(0px - clamp(16px, 1.6vw, 30px));
+  z-index: -1;
   display: block;
-  width: 100%;
-  height: 40%;
+  width: calc(100% + 2 * clamp(16px, 1.6vw, 30px));
+  height: calc(100% + 79px);
   pointer-events: none;
+  -webkit-mask-image: linear-gradient(
+    to top,
+    #000 0%,
+    #000 68%,
+    rgba(0, 0, 0, 0.75) 72%,
+    rgba(0, 0, 0, 0.4) 77%,
+    rgba(0, 0, 0, 0.14) 82%,
+    transparent 88%
+  );
+  mask-image: linear-gradient(
+    to top,
+    #000 0%,
+    #000 68%,
+    rgba(0, 0, 0, 0.75) 72%,
+    rgba(0, 0, 0, 0.4) 77%,
+    rgba(0, 0, 0, 0.14) 82%,
+    transparent 88%
+  );
 }
 
 .countdown-tile__label {
-  position: relative;
-  z-index: 1;
   color: var(--muted);
   font-size: clamp(0.88rem, 1vw, 1.05rem);
   font-weight: 600;
@@ -298,21 +331,12 @@ select {
 }
 
 .countdown-tile__value {
-  position: relative;
-  z-index: 1;
   color: var(--text);
   font-size: clamp(1.4rem, 2.4vw, 2.4rem);
   font-weight: 700;
   line-height: 1.15;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-}
-
-/* Safety halo: the strip stays below the text today, but a shadow keeps the
-   labels legible if the smoke area is ever enlarged. */
-.countdown-tile--live .countdown-tile__label,
-.countdown-tile--live .countdown-tile__value {
-  text-shadow: 0 1px 12px rgba(4, 7, 13, 0.95), 0 0 4px rgba(4, 7, 13, 0.8);
 }
 
 .live-clock {
