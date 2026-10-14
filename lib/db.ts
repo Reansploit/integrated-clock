@@ -706,19 +706,26 @@ export function updateRecitationRunStatus(runKey: string, status: string, reason
     .run(status, reason, runKey);
 }
 
-/** A run still playing blocks the next slot from starting on top of it. */
+/**
+ * A run still playing blocks the next slot from starting on top of it.
+ *
+ * A run whose deadline has already passed is treated as settled even if nobody
+ * ever reported it: a board that stayed off for the whole window must not
+ * silence the mufrodat video for the rest of the day.
+ */
 export function findRunningRecitationRun(ignoreRunKey = ''): RecitationRunRow | null {
   ensureDatabase();
+  const nowIso = new Date().toISOString();
   const row = getDb()
     .prepare(
       `SELECT id, run_key AS runKey, slot_id AS slotId, slot_label AS slotLabel, date_key AS dateKey,
               start_iso AS startIso, deadline_iso AS deadlineIso, plan_json AS planJson,
               status, reason, created_at AS createdAt
        FROM recitation_runs
-       WHERE status IN ('planned', 'running') AND run_key <> ?
+       WHERE status IN ('planned', 'running') AND run_key <> ? AND deadline_iso > ?
        ORDER BY id DESC LIMIT 1`,
     )
-    .get(ignoreRunKey) as RecitationRunRow | undefined;
+    .get(ignoreRunKey, nowIso) as RecitationRunRow | undefined;
 
   return row ? { ...row } : null;
 }

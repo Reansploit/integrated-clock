@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import {
+  isRecitationActive,
+  subscribeToRecitationActive,
+  type RecitationBroadcast,
+} from '@/lib/recitation-broadcast';
 import { findActiveSlot, getJakartaNow, pickNextIndex, type VocabSlot } from '@/lib/vocab';
 
 export type VocabItem = {
@@ -78,6 +83,7 @@ export function VocabTakeoverOverlay({
   const [loadError, setLoadError] = useState(false);
   const [index, setIndex] = useState(0);
   const [liveIndex, setLiveIndex] = useState<number | null>(null);
+  const [recitationActive, setRecitationActive] = useState(false);
   const lastScheduleJsonRef = useRef('');
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -92,9 +98,18 @@ export function VocabTakeoverOverlay({
     return () => window.clearInterval(timer);
   }, []);
 
+  // A recitation owns the room while it plays: the cards step aside instead of
+  // talking over a matan. The recitation bar stays on top, so the operator can
+  // still see which slot is sounding.
+  useEffect(() => {
+    const apply = (detail: RecitationBroadcast) => setRecitationActive(Boolean(detail?.active));
+    apply({ active: isRecitationActive(), label: '' });
+    return subscribeToRecitationActive(apply);
+  }, []);
+
   const activeSlot = useMemo(
-    () => findActiveSlot(effectiveSlots, getJakartaNow(new Date(tick))),
-    [effectiveSlots, tick],
+    () => (recitationActive ? null : findActiveSlot(effectiveSlots, getJakartaNow(new Date(tick)))),
+    [effectiveSlots, recitationActive, tick],
   );
 
   const refreshSchedule = useCallback(async () => {

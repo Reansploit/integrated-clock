@@ -1454,6 +1454,60 @@ html.vocab-takeover .ticker {
   }
 }
 
+/* ===== RECITATION (scheduled matan / murottal / adhan) ===== */
+
+/* One line at the top of the board while a planned recitation is sounding. It
+   states which slot is playing and nothing about timings: a recitation that
+   runs long is still allowed to finish, so promising an end time on screen
+   would be a claim the system does not make. */
+.recitation-bar {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  z-index: 92;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  transform: translateX(-50%);
+  border: 1px solid rgba(141, 215, 255, 0.4);
+  border-radius: 999px;
+  background: rgba(6, 11, 20, 0.9);
+  color: var(--text);
+  padding: 0.55rem 1.2rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.recitation-bar__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #8dd7ff;
+  box-shadow: 0 0 12px rgba(141, 215, 255, 0.8);
+  animation: recitationPulse 2.4s ease-in-out infinite;
+}
+
+/* Chrome on the TV refuses to play until something is touched. Saying so on the
+   board, in the same position the announcement uses for its own unlock, is the
+   difference between a silent room and a working recitation. */
+.recitation-bar__unlock {
+  border-left: 1px solid var(--line-strong);
+  padding-left: 0.7rem;
+  color: #8dd7ff;
+  font-weight: 500;
+}
+
+@keyframes recitationPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
 /* ===== LIVE ANNOUNCEMENT (admin push-to-talk, mirrored on the board) ===== */
 
 /* The frame is only a marker that a human is talking. It must not compete with
@@ -2036,6 +2090,218 @@ a:focus-visible {
   opacity: 0.35;
   cursor: default;
   pointer-events: none;
+}
+
+/* ---------- scheduled recitation slots (console) ---------- */
+
+.slots {
+  display: grid;
+  gap: 18px;
+  margin-top: 26px;
+}
+
+.slot {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  padding: 18px 20px 20px;
+}
+
+.slot[data-enabled='true'] {
+  border-left-color: var(--accent);
+}
+
+.slot__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.slot__head h3 {
+  margin: 0;
+  font-size: 1.06rem;
+}
+
+.slot__meta,
+.slot__timeline-caption {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.slot__state {
+  border: 1px solid var(--line-strong);
+  padding: 3px 9px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.slot__state[data-tone='ok'] {
+  border-color: rgba(141, 215, 255, 0.45);
+  color: #8dd7ff;
+}
+
+/* The window against what it holds: the fill is the time actually spoken, so a
+   playlist that overruns shows as a bar that stops short of the window's end
+   while the caption names what got left out. */
+.slot__timeline {
+  margin: 16px 0 4px;
+}
+
+.slot__timeline-track {
+  position: relative;
+  height: 8px;
+  background: rgba(141, 215, 255, 0.1);
+  overflow: hidden;
+}
+
+.slot__timeline-fill {
+  height: 100%;
+  background: var(--accent);
+}
+
+.slot__empty,
+.slot__warning {
+  margin: 10px 0 0;
+  color: #ffb3bf;
+  font-size: 0.88rem;
+}
+
+.recitation-items {
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.recitation-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+}
+
+.recitation-item[data-dropped='true'] {
+  border-color: rgba(255, 95, 118, 0.4);
+  background: rgba(255, 95, 118, 0.06);
+}
+
+.recitation-item__body {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.recitation-item__order {
+  min-width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.recitation-item__meta {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.83rem;
+}
+
+.recitation-item__unknown {
+  color: #ffb3bf;
+}
+
+.recitation-item__dropped {
+  margin: 6px 0 0;
+  color: #ff8a9b;
+  font-size: 0.83rem;
+}
+
+.recitation-item__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.slot__add {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 160px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.slot__add .field-grid__actions {
+  grid-column: 1 / -1;
+}
+
+.slot__edit {
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.slot__edit summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.slot__danger {
+  margin-top: 14px;
+}
+
+.day-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.day-picker__day {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  padding: 5px 10px;
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.duration-meter {
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  padding: 14px 16px;
+}
+
+.duration-meter__note,
+.duration-meter__summary {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.duration-meter__summary[data-tone='error'] {
+  color: #ff8a9b;
+}
+
+.recitation-history {
+  margin-top: 24px;
+}
+
+.recitation-history summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 /* ---------- row lists ---------- */

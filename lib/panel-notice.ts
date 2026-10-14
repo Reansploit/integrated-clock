@@ -40,6 +40,13 @@ const notices: Record<string, PanelNotice> = {
   'mufrodat-deleted': { tone: 'ok', text: 'Kosakata dihapus.' },
 
   'sound-added': { tone: 'ok', text: 'Suara tersimpan di perpustakaan.' },
+  'recitation-slot-added': { tone: 'ok', text: 'Slot rekaman ditambahkan.' },
+  'recitation-slot-saved': { tone: 'ok', text: 'Slot rekaman tersimpan.' },
+  'recitation-slot-deleted': { tone: 'ok', text: 'Slot rekaman dihapus beserta seluruh rekamannya.' },
+  'recitation-item-added': { tone: 'ok', text: 'Rekaman ditambahkan ke slot.' },
+  'recitation-item-deleted': { tone: 'ok', text: 'Rekaman dikeluarkan dari slot.' },
+  'recitation-item-moved': { tone: 'ok', text: 'Urutan rekaman diperbarui.' },
+  'recitation-move-edge': { tone: 'error', text: 'Urutan tidak berubah, rekaman sudah di ujung daftar.' },
   'sound-too-large': { tone: 'error', text: 'Suara ditolak: ukuran file maksimal 20 MB.' },
   'sound-type-invalid': { tone: 'error', text: 'Suara ditolak: format yang diterima mp3, wav, ogg, m4a, atau aac.' },
   'sound-no-file': { tone: 'error', text: 'Belum ada file suara yang dipilih.' },

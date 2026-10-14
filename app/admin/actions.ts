@@ -7,8 +7,9 @@ import { revalidatePath } from 'next/cache';
 import { unstable_rethrow } from 'next/navigation';
 import { z } from 'zod';
 
-import { bumpRevision, ensureDatabase, getDb, upsertSetting } from '@/lib/db';
+import { bumpRevision, ensureDatabase, getDb, saveSoundDuration, upsertSetting } from '@/lib/db';
 import { describeIssues, panelRedirect } from '@/lib/panel-notice';
+import { RECITATION_KINDS } from '@/lib/recitation';
 
 const WEEK_DAYS = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu'] as const;
 
@@ -52,6 +53,39 @@ const mufrodatVideoSettingsSchema = z.object({
   playbackMode: z.enum(['sequential', 'random']),
   scheduleTimes: z.string().max(1000),
 });
+
+const recitationSlotSchema = z.object({
+  label: z.string().min(1, 'nama slot wajib diisi').max(120),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, 'jam mulai harus HH:MM'),
+  deadlineTime: z.string().regex(/^\d{2}:\d{2}$/, 'batas akhir harus HH:MM'),
+  gapSec: z.coerce.number().int().min(0).max(600),
+  graceMin: z.coerce.number().int().min(1).max(120),
+  // The create form has no status box, so an absent or blank value means "live".
+  // readForm passes every missing field as '', which a plain default() would not
+  // catch, hence the empty-string case here.
+  enabled: z
+    .string()
+    .optional()
+    .transform((value) => (value === '0' ? '0' : '1')),
+});
+
+const recitationItemSchema = z.object({
+  kind: z.enum(RECITATION_KINDS, { message: 'pilih jenis rekaman' }),
+  url: z.string().min(1, 'pilih file dari perpustakaan suara').max(500),
+});
+
+/**
+ * Days are checkbox values, and the "every day" case has no checkboxes at all,
+ * so the field is read separately rather than through the required-field list.
+ * An empty list means every day.
+ */
+function readDayList(formData: FormData): string {
+  return formData
+    .getAll('days')
+    .map((value) => String(value).trim().toLowerCase())
+    .filter((day) => (WEEK_DAYS as readonly string[]).includes(day))
+    .join(',');
+}
 
 const MAX_EVENT_SOUND_SIZE_BYTES = 20 * 1024 * 1024;
 const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
@@ -846,4 +880,199 @@ export async function stopMufrodatVideoPlayback(formData?: FormData) {
     upsertSetting('mufrodatVideoPlaybackNonce', '');
     upsertSetting('mufrodatVideoPlaybackRequestedAt', '');
   }, formData);
+}
+
+function readRecitationSlotId(formData: FormData) {
+  const id = Number(formData.get('slotId'));
+  if (!Number.isFinite(id) || id <= 0) {
+    throw new PanelError('row-missing');
+  }
+  return id;
+}
+
+function readRecitationItemId(formData: FormData) {
+  const id = Number(formData.get('itemId'));
+  if (!Number.isFinite(id) || id <= 0) {
+    throw new PanelError('row-missing');
+  }
+  return id;
+}
+
+function writeRecitationSlot(formData: FormData, slotId: number | null) {
+  requireDatabase();
+
+  const values = readForm(recitationSlotSchema, formData, ['label', 'startTime', 'deadlineTime', 'gapSec', 'graceMin', 'enabled']);
+  const days = readDayList(formData);
+  const db = getDb();
+
+  if (slotId === null) {
+    const nextSortRow = db
+      .prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS nextSortOrder FROM recitation_slots')
+      .get() as { nextSortOrder: number };
+    const result = db
+      .prepare(
+        `INSERT INTO recitation_slots (label, start_time, deadline_time, days, gap_sec, grace_min, enabled, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        values.label,
+        values.startTime,
+        values.deadlineTime,
+        days,
+        values.gapSec,
+        values.graceMin,
+        values.enabled,
+        Number(nextSortRow?.nextSortOrder || 1),
+      );
+    return Number(result.lastInsertRowid);
+  }
+
+  db.prepare(
+    `UPDATE recitation_slots
+     SET label = ?, start_time = ?, deadline_time = ?, days = ?, gap_sec = ?, grace_min = ?, enabled = ?,
+         updated_at = datetime('now')
+     WHERE id = ?`,
+  ).run(values.label, values.startTime, values.deadlineTime, days, values.gapSec, values.graceMin, values.enabled, slotId);
+
+  return slotId;
+}
+
+export async function createRecitationSlot(formData: FormData) {
+  return guard('rekaman', 'recitation-slot-added', () => {
+    writeRecitationSlot(formData, null);
+  }, formData);
+}
+
+export async function updateRecitationSlot(formData: FormData) {
+  return guard('rekaman', 'recitation-slot-saved', () => {
+    writeRecitationSlot(formData, readRecitationSlotId(formData));
+  }, formData);
+}
+
+export async function deleteRecitationSlot(formData: FormData) {
+  return guard('rekaman', 'recitation-slot-deleted', () => {
+    const db = getDb();
+    const slotId = readRecitationSlotId(formData);
+
+    // The FK cascade is enabled, but the items go first so the delete works the
+    // same on a database opened without the pragma.
+    db.prepare('DELETE FROM recitation_items WHERE slot_id = ?').run(slotId);
+    const result = db.prepare('DELETE FROM recitation_slots WHERE id = ?').run(slotId);
+    if (!result.changes) {
+      throw new PanelError('row-missing');
+    }
+  }, formData);
+}
+
+/** Items play in this order, and the gap is measured from the previous file. */
+export async function addRecitationItem(formData: FormData) {
+  return guard('rekaman', 'recitation-item-added', () => {
+    const db = getDb();
+    const slotId = readRecitationSlotId(formData);
+    const values = readForm(recitationItemSchema, formData, ['kind', 'url']);
+
+    const slot = db.prepare('SELECT id FROM recitation_slots WHERE id = ? LIMIT 1').get(slotId) as
+      | { id: number }
+      | undefined;
+    if (!slot) {
+      throw new PanelError('row-missing');
+    }
+
+    const nextSortRow = db
+      .prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS nextSortOrder FROM recitation_items WHERE slot_id = ?')
+      .get(slotId) as { nextSortOrder: number };
+
+    db.prepare(
+      'INSERT INTO recitation_items (slot_id, kind, url, duration_ms, sort_order) VALUES (?, ?, ?, 0, ?)',
+    ).run(slotId, values.kind, values.url, Number(nextSortRow?.nextSortOrder || 1));
+  }, formData);
+}
+
+export async function deleteRecitationItem(formData: FormData) {
+  return guard('rekaman', 'recitation-item-deleted', () => {
+    const db = getDb();
+    const itemId = readRecitationItemId(formData);
+
+    const result = db.prepare('DELETE FROM recitation_items WHERE id = ?').run(itemId);
+    if (!result.changes) {
+      throw new PanelError('row-missing');
+    }
+
+    db.exec(`
+      UPDATE recitation_items SET sort_order = (
+        SELECT next_sort FROM (
+          SELECT id, ROW_NUMBER() OVER (ORDER BY sort_order ASC, id ASC) AS next_sort
+          FROM recitation_items
+        ) AS ordered WHERE ordered.id = recitation_items.id
+      )
+    `);
+  }, formData);
+}
+
+const recitationMoveSchema = z.object({
+  direction: z.enum(['up', 'down']),
+});
+
+const MOVE_ORDER = { up: 'DESC', down: 'ASC' } as const;
+
+export async function moveRecitationItem(formData: FormData) {
+  return guard('rekaman', 'recitation-item-moved', () => {
+    const db = getDb();
+    const itemId = readRecitationItemId(formData);
+    const values = readForm(recitationMoveSchema, formData, ['direction']);
+
+    const item = db
+      .prepare('SELECT id, slot_id AS slotId, sort_order AS sortOrder FROM recitation_items WHERE id = ? LIMIT 1')
+      .get(itemId) as { id: number; slotId: number; sortOrder: number } | undefined;
+    if (!item) {
+      throw new PanelError('row-missing');
+    }
+
+    // The direction picks a comparison from a fixed table rather than being
+    // interpolated, so the statement text never depends on a submitted value.
+    const order = MOVE_ORDER[values.direction];
+    const neighbour = db
+      .prepare(
+        `SELECT id, sort_order AS sortOrder FROM recitation_items
+         WHERE slot_id = ? AND (sort_order < ? OR sort_order > ?)
+         ORDER BY sort_order ${order}, id ${order}
+         LIMIT 1`,
+      )
+      .get(item.slotId, item.sortOrder, item.sortOrder) as { id: number; sortOrder: number } | undefined;
+
+    if (!neighbour) {
+      throw new PanelError('recitation-move-edge');
+    }
+
+    // A straight swap: both rows take each other's order, so no row is ever left
+    // holding a duplicate order number.
+    db.prepare('UPDATE recitation_items SET sort_order = ? WHERE id = ?').run(neighbour.sortOrder, item.id);
+    db.prepare('UPDATE recitation_items SET sort_order = ? WHERE id = ?').run(item.sortOrder, neighbour.id);
+  }, formData);
+}
+
+/**
+ * Durations measured by the operator's browser, one click over the whole
+ * library. Without them the planner leaves every file out, so this is the one
+ * measurement step that has to happen before a slot can play anything.
+ */
+export async function measureSoundDurations(payload: unknown) {
+  const parsed = z
+    .object({
+      entries: z.array(z.object({ url: z.string().min(1).max(500), durationMs: z.number().int().min(0) })).max(400),
+    })
+    .safeParse(payload);
+
+  if (!parsed.success) {
+    throw new PanelError('invalid', describeIssues(parsed.error.issues));
+  }
+
+  let measured = 0;
+  for (const entry of parsed.data.entries) {
+    if (entry.durationMs <= 0) continue;
+    saveSoundDuration(entry.url, entry.durationMs);
+    measured += 1;
+  }
+
+  return { measured };
 }

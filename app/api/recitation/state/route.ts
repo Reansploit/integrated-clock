@@ -50,7 +50,13 @@ export async function GET() {
       // window while playing, so a reload does not replay the slot from the top.
       if (existing) {
         return NextResponse.json(
-          { ok: true, run: existing, window: { startIso: new Date(window.startMs).toISOString() } },
+          {
+            ok: true,
+            run: existing,
+            plan: existing.plan,
+            gapSec: slot.gapSec,
+            window: { startIso: new Date(window.startMs).toISOString() },
+          },
           { headers: NO_STORE },
         );
       }
@@ -71,7 +77,7 @@ export async function GET() {
           dateKey,
           startIso: new Date(window.startMs).toISOString(),
           deadlineIso: new Date(window.deadlineMs).toISOString(),
-          planJson: JSON.stringify(plan.planned),
+          planJson: JSON.stringify(plan),
           status: 'skipped',
           reason: `Bentrok dengan "${running.slotLabel}" yang masih bunyi.`,
         });
@@ -94,11 +100,12 @@ export async function GET() {
         {
           ok: true,
           run,
+          plan,
+          gapSec: slot.gapSec,
           window: {
             startIso: new Date(window.startMs).toISOString(),
             deadlineIso: new Date(window.deadlineMs).toISOString(),
           },
-          plan,
         },
         { headers: NO_STORE },
       );
@@ -118,20 +125,18 @@ function getRunByKey(runKey: string) {
   return { ...run, plan: parsePlan(run.planJson) };
 }
 
+/**
+ * The stored plan keeps the dropped files and the operator's reason alongside
+ * the ones that play, so the board's payload and the console's drawing come
+ * from the same object rather than two shapes that have to agree.
+ */
 function parsePlan(raw: string): RecitationPlan | null {
   try {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object' && Array.isArray(parsed.planned)) {
       return parsed as RecitationPlan;
     }
-    // A plan written by the collision path stores only the planned array.
-    return {
-      status: 'planned',
-      reason: '',
-      planned: parsed,
-      dropped: [],
-      windowSec: 0,
-    } as RecitationPlan;
+    return null;
   } catch {
     return null;
   }

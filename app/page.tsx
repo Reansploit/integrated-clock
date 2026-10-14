@@ -6,6 +6,7 @@ import { PrayerTimesPanel } from '@/components/PrayerTimesPanel';
 import { Ticker } from '@/components/Ticker';
 import { MufrodatVideoOverlay } from '@/components/MufrodatVideoOverlay';
 import { LiveAnnouncementOverlay } from '@/components/LiveAnnouncementOverlay';
+import { RecitationPlayer } from '@/components/RecitationPlayer';
 import { VocabTakeoverOverlay } from '@/components/VocabTakeoverOverlay';
 import { getDashboardData } from '@/lib/dashboard';
 import { getNextPrayer, getPrayerTimes } from '@/lib/prayer';
@@ -124,6 +125,7 @@ export default async function Home() {
       <MufrodatVideoOverlay src="" playbackNonce="" />
       <LiveAnnouncementOverlay />
       <VocabTakeoverOverlay slots={data.vocabSlots} items={data.vocabItems} />
+      <RecitationPlayer />
 
       <header className="top-strip">
         <span className="top-strip__brand">Wonosalam Boarding School</span>

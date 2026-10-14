@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 
-import { ensureDatabase, getDb, upsertSetting } from '@/lib/db';
+import { ensureDatabase, findRunningRecitationRun, getDb, upsertSetting } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -117,6 +117,14 @@ export async function GET() {
 
     const scheduleTimes = normalizeScheduleTimes(String(map.mufrodatVideoScheduleTimes || ''));
     if (!scheduleTimes.length) {
+      return emptyPayload();
+    }
+
+    // A planned or playing recitation claims the room. Skipping here rather
+    // than on the board means the video's own slot marker is never stamped, so
+    // it plays on its usual schedule instead of being silently consumed.
+    const recitation = findRunningRecitationRun();
+    if (recitation) {
       return emptyPayload();
     }
 

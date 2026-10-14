@@ -2,6 +2,7 @@ import {
   clearBackgroundImage,
   createEvent,
   createMufrodat,
+  createRecitationSlot,
   deleteEvent,
   deleteMufrodat,
   deleteMufrodatVideo,
@@ -22,11 +23,14 @@ import {
 
 import { AdminAnnouncementControl } from '@/components/AdminAnnouncementControl';
 import { EventPager } from '@/components/EventPager';
+import { RecitationSlotCard } from '@/components/RecitationSlotCard';
+import { SoundDurationMeter } from '@/components/SoundDurationMeter';
 import { SubmitButton } from '@/components/SubmitButton';
 import { getDashboardData } from '@/lib/dashboard';
-import { getDbWriteInfo } from '@/lib/db';
+import { getDbWriteInfo, getRecitationItems, getRecitationRuns, getRecitationSlots, getSoundDurations } from '@/lib/db';
 import { listAssetUrls, resolveAssetUrl } from '@/lib/media';
 import { readNoticeDetail, resolveNotice } from '@/lib/panel-notice';
+import { formatDuration, type RecitationItem, type RecitationSlot } from '@/lib/recitation';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,6 +56,16 @@ const WEEK_DAYS = [
   { value: 'minggu', label: 'Minggu' },
 ] as const;
 
+const recitationRunLabels: Record<string, string> = {
+  planned: 'terjadwal',
+  running: 'sedang bunyi',
+  done: 'selesai',
+  missed: 'terlewat',
+  empty: 'tidak ada yang muat',
+  overrun: 'melewati batas jam',
+  skipped: 'dilewati, bentrok slot lain',
+};
+
 const SECTION_GROUPS = [
   {
     title: 'Papan',
@@ -68,7 +82,10 @@ const SECTION_GROUPS = [
   },
   {
     title: 'Audio',
-    links: [{ href: '#suara', label: 'Perpustakaan suara' }],
+    links: [
+      { href: '#suara', label: 'Perpustakaan suara' },
+      { href: '#rekaman', label: 'Rekaman terjadwal' },
+    ],
   },
   {
     title: 'Bahasa',
@@ -204,6 +221,23 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const playbackMode = data.settings.mufrodatVideoPlaybackMode === 'random' ? 'random' : 'sequential';
   const activeVocabSlots = data.vocabSlots.filter((slot) => slot.enabled);
   const manualSlot = data.vocabSlots.find((slot) => slot.enabled && slot.mode === 'manual');
+
+  const recitationSlots = getRecitationSlots();
+  const recitationItems = getRecitationItems();
+  const recitationDurations = getSoundDurations();
+  const recitationRuns = getRecitationRuns(20);
+  const recitationItemsBySlot = new Map<number, RecitationItem[]>(
+    recitationSlots.map((slot) => [slot.id, recitationItems.filter((item) => item.slotId === slot.id)]),
+  );
+  // One picker for every slot: the uploaded library plus anything already in
+  // assets/audio/events, so a file dropped on disk is usable without uploading
+  // it again.
+  const recitationSoundOptions = [
+    ...data.eventSounds.map((sound) => ({ url: sound.soundUrl, label: sound.originalName })),
+    ...eventSoundFiles
+      .filter((url) => !eventSoundNameByUrl.has(url))
+      .map((url) => ({ url, label: fileNameOf(url) || url })),
+  ].sort((left, right) => left.label.localeCompare(right.label));
 
   const totalEventPages = Math.max(1, Math.ceil(data.events.length / EVENTS_PER_PAGE));
   const requestedPage = Number.parseInt(String(params.page || '1'), 10);
@@ -663,6 +697,94 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             kegiatan.
           </p>
         )}
+      </section>
+
+      <section className="panel" id="rekaman">
+        <div className="panel__head">
+          <h2>Rekaman terjadwal</h2>
+          <p>
+            Slot memutar matan, murottal, atau adzan pada jam yang kamu tentukan, dan harus selesai sebelum jam
+            batas. Papan tidak pernah menghentikan rekaman di tengah: file yang tidak muat dilewati dari awal, dan
+            dicoret di bawah ini sebelum hari-H.
+          </p>
+        </div>
+
+        <SoundDurationMeter
+          sounds={recitationSoundOptions.map((sound) => ({
+            url: sound.url,
+            label: sound.label,
+            durationMs: recitationDurations[sound.url] ?? 0,
+          }))}
+        />
+
+        <form action={createRecitationSlot} className="field-grid recitation-new">
+          <input type="hidden" name="page" value={currentPage} />
+          <label className="field">
+            <span>Nama slot</span>
+            <input name="label" placeholder="Murottal Subuh" required />
+          </label>
+          <label className="field">
+            <span>Mulai</span>
+            <input name="startTime" defaultValue="04:40" required placeholder="05:30" />
+          </label>
+          <label className="field">
+            <span>Harus selesai sebelum</span>
+            <input name="deadlineTime" defaultValue="05:30" required placeholder="06:15" />
+          </label>
+          <label className="field">
+            <span>Jeda antar rekaman (detik)</span>
+            <input name="gapSec" type="number" min={0} max={600} defaultValue={15} />
+          </label>
+          <label className="field">
+            <span>Toleransi telat (menit)</span>
+            <input name="graceMin" type="number" min={1} max={120} defaultValue={5} />
+            <small>Slot baru mulai setiap hari. Pilih hari tertentu setelah slot tersimpan.</small>
+          </label>
+          <div className="field-grid__actions">
+            <SubmitButton pendingLabel="Menyimpan">Tambah slot</SubmitButton>
+          </div>
+        </form>
+
+        {recitationSlots.length ? (
+          <div className="slots">
+            {recitationSlots.map((slot) => (
+              <RecitationSlotCard
+                key={slot.id}
+                slot={slot}
+                items={recitationItemsBySlot.get(slot.id) ?? []}
+                durations={recitationDurations}
+                sounds={recitationSoundOptions}
+                page={currentPage}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="empty">
+            Belum ada slot. Tambahkan satu di atas, lalu isi rekamannya dari perpustakaan suara.
+          </p>
+        )}
+
+        {recitationRuns.length ? (
+          <details className="recitation-history">
+            <summary>Riwayat {recitationRuns.length} tayang terakhir</summary>
+            <ul className="rows">
+              {recitationRuns.map((run) => (
+                <li key={run.id} className="row">
+                  <div className="row__body">
+                    <div className="row__title">
+                      <strong>{run.slotLabel || `Slot ${run.slotId}`}</strong>
+                    </div>
+                    <p className="row__meta">
+                      {run.dateKey} · {formatDuration(Math.max(0, Date.parse(run.deadlineIso) - Date.parse(run.startIso)))}{' '}
+                      jendela · <span data-status={run.status}>{recitationRunLabels[run.status] ?? run.status}</span>
+                    </p>
+                    {run.reason ? <p className="row__meta">{run.reason}</p> : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </section>
 
       <section className="panel" id="mufrodat">
