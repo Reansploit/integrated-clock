@@ -3,6 +3,8 @@ import path from 'path';
 import { DatabaseSync } from 'node:sqlite';
 import { config as loadEnv } from 'dotenv';
 
+import type { RecitationKind, RecitationRunStatus } from '@/lib/recitation';
+
 loadEnv({ path: '.env.local' });
 loadEnv();
 
@@ -66,6 +68,41 @@ export type VocabSlotRow = {
   intervalSec: number;
   orderMode: 'sequential' | 'random';
   enabled: boolean;
+};
+
+export type RecitationSlotRow = {
+  id: number;
+  label: string;
+  startTime: string;
+  deadlineTime: string;
+  days: string;
+  gapSec: number;
+  graceMin: number;
+  enabled: boolean;
+  sortOrder: number;
+};
+
+export type RecitationItemRow = {
+  id: number;
+  slotId: number;
+  kind: RecitationKind;
+  url: string;
+  durationMs: number;
+  sortOrder: number;
+};
+
+export type RecitationRunRow = {
+  id: number;
+  runKey: string;
+  slotId: number;
+  slotLabel: string;
+  dateKey: string;
+  startIso: string;
+  deadlineIso: string;
+  planJson: string;
+  status: RecitationRunStatus;
+  reason: string;
+  createdAt: string;
 };
 
 export type DashboardSettings = {
@@ -282,6 +319,53 @@ function bootstrapDatabase() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS recitation_slots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT NOT NULL,
+      start_time TEXT NOT NULL DEFAULT '',
+      deadline_time TEXT NOT NULL DEFAULT '',
+      days TEXT NOT NULL DEFAULT '',
+      gap_sec INTEGER NOT NULL DEFAULT 15,
+      grace_min INTEGER NOT NULL DEFAULT 5,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS recitation_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slot_id INTEGER NOT NULL REFERENCES recitation_slots(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL DEFAULT 'matan',
+      url TEXT NOT NULL,
+      duration_ms INTEGER NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS recitation_items_slot_idx
+      ON recitation_items (slot_id, sort_order, id);
+    -- Durations are a property of the file, not of the slot, so they live in
+    -- one table shared by the sound library and every recitation slot.
+    CREATE TABLE IF NOT EXISTS sound_durations (
+      url TEXT PRIMARY KEY,
+      duration_ms INTEGER NOT NULL,
+      measured_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS recitation_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_key TEXT NOT NULL UNIQUE,
+      slot_id INTEGER NOT NULL,
+      slot_label TEXT NOT NULL DEFAULT '',
+      date_key TEXT NOT NULL,
+      start_iso TEXT NOT NULL,
+      deadline_iso TEXT NOT NULL,
+      plan_json TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'planned',
+      reason TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS recitation_runs_date_idx
+      ON recitation_runs (date_key DESC, id DESC);
   `);
 
   const upsert = database.prepare(
@@ -500,6 +584,157 @@ export function getMufrodatVideos(): MufrodatVideoRow[] {
        ORDER BY sort_order ASC, id ASC`,
       )
       .all() as MufrodatVideoRow[],
+  );
+}
+
+export function getRecitationSlots(): RecitationSlotRow[] {
+  ensureDatabase();
+  return plain(
+    getDb()
+      .prepare(
+        `SELECT id, label, start_time AS startTime, deadline_time AS deadlineTime, days,
+                gap_sec AS gapSec, grace_min AS graceMin, enabled, sort_order AS sortOrder
+         FROM recitation_slots
+         ORDER BY sort_order ASC, start_time ASC, id ASC`,
+      )
+      .all() as unknown as RecitationSlotRow[],
+  );
+}
+
+export function getRecitationItems(slotId?: number): RecitationItemRow[] {
+  ensureDatabase();
+  const rows = slotId
+    ? getDb()
+        .prepare(
+          `SELECT id, slot_id AS slotId, kind, url, duration_ms AS durationMs, sort_order AS sortOrder
+           FROM recitation_items WHERE slot_id = ?
+           ORDER BY sort_order ASC, id ASC`,
+        )
+        .all(slotId)
+    : getDb()
+        .prepare(
+          `SELECT id, slot_id AS slotId, kind, url, duration_ms AS durationMs, sort_order AS sortOrder
+           FROM recitation_items
+           ORDER BY slot_id ASC, sort_order ASC, id ASC`,
+        )
+        .all();
+
+  return plain(rows as RecitationItemRow[]);
+}
+
+export function getSoundDurations(): Record<string, number> {
+  ensureDatabase();
+  const rows = plain(
+    getDb().prepare('SELECT url, duration_ms AS durationMs FROM sound_durations').all() as Array<{
+      url: string;
+      durationMs: number;
+    }>,
+  );
+
+  return rows.reduce<Record<string, number>>((map, row) => {
+    map[row.url] = row.durationMs;
+    return map;
+  }, {});
+}
+
+export function saveSoundDuration(url: string, durationMs: number) {
+  ensureDatabase();
+  getDb()
+    .prepare(
+      `INSERT INTO sound_durations (url, duration_ms) VALUES (?, ?)
+       ON CONFLICT(url) DO UPDATE SET duration_ms = excluded.duration_ms, measured_at = datetime('now')`,
+    )
+    .run(url, Math.round(durationMs));
+}
+
+/**
+ * One row per slot per day, claimed through the UNIQUE run_key rather than a
+ * "last slot" setting: two boards polling at the same second still produce one
+ * run, and the row is the history the operator reads afterwards.
+ */
+export function claimRecitationRun(run: {
+  runKey: string;
+  slotId: number;
+  slotLabel: string;
+  dateKey: string;
+  startIso: string;
+  deadlineIso: string;
+  planJson: string;
+  status: string;
+  reason: string;
+}): RecitationRunRow {
+  ensureDatabase();
+  getDb()
+    .prepare(
+      `INSERT INTO recitation_runs (run_key, slot_id, slot_label, date_key, start_iso, deadline_iso, plan_json, status, reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(run_key) DO NOTHING`,
+    )
+    .run(
+      run.runKey,
+      run.slotId,
+      run.slotLabel,
+      run.dateKey,
+      run.startIso,
+      run.deadlineIso,
+      run.planJson,
+      run.status,
+      run.reason,
+    );
+
+  return getRecitationRun(run.runKey) as RecitationRunRow;
+}
+
+export function getRecitationRun(runKey: string): RecitationRunRow | null {
+  ensureDatabase();
+  const row = getDb()
+    .prepare(
+      `SELECT id, run_key AS runKey, slot_id AS slotId, slot_label AS slotLabel, date_key AS dateKey,
+              start_iso AS startIso, deadline_iso AS deadlineIso, plan_json AS planJson,
+              status, reason, created_at AS createdAt
+       FROM recitation_runs WHERE run_key = ? LIMIT 1`,
+    )
+    .get(runKey) as RecitationRunRow | undefined;
+
+  return row ? { ...row } : null;
+}
+
+export function updateRecitationRunStatus(runKey: string, status: string, reason = '') {
+  ensureDatabase();
+  getDb()
+    .prepare('UPDATE recitation_runs SET status = ?, reason = ? WHERE run_key = ?')
+    .run(status, reason, runKey);
+}
+
+/** A run still playing blocks the next slot from starting on top of it. */
+export function findRunningRecitationRun(ignoreRunKey = ''): RecitationRunRow | null {
+  ensureDatabase();
+  const row = getDb()
+    .prepare(
+      `SELECT id, run_key AS runKey, slot_id AS slotId, slot_label AS slotLabel, date_key AS dateKey,
+              start_iso AS startIso, deadline_iso AS deadlineIso, plan_json AS planJson,
+              status, reason, created_at AS createdAt
+       FROM recitation_runs
+       WHERE status IN ('planned', 'running') AND run_key <> ?
+       ORDER BY id DESC LIMIT 1`,
+    )
+    .get(ignoreRunKey) as RecitationRunRow | undefined;
+
+  return row ? { ...row } : null;
+}
+
+export function getRecitationRuns(limit = 20): RecitationRunRow[] {
+  ensureDatabase();
+  return plain(
+    getDb()
+      .prepare(
+        `SELECT id, run_key AS runKey, slot_id AS slotId, slot_label AS slotLabel, date_key AS dateKey,
+                start_iso AS startIso, deadline_iso AS deadlineIso, plan_json AS planJson,
+                status, reason, created_at AS createdAt
+         FROM recitation_runs
+         ORDER BY id DESC LIMIT ?`,
+      )
+      .all(limit) as RecitationRunRow[],
   );
 }
 
