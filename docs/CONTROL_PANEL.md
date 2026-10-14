@@ -5,7 +5,7 @@ dan pola umpan balik yang sama.
 
 - `/admin`: isi papan, dikelompokkan. Papan: teks berjalan, kota dan jadwal
   sholat, layar dan suara bawaan, hitung mundur. Jadwal: kegiatan. Audio:
-  perpustakaan suara.
+  perpustakaan suara, rekaman terjadwal.
   Bahasa: mufrodat, video mufrodat, ringkasan kosakata (dikelola di halaman
   sendiri). Siaran: pengumuman langsung.
 - `/control/vocab`: kosakata tayang: kartu, slot jadwal, kendali manual.
@@ -49,6 +49,60 @@ Tile yang punya tanggal dinyalakan dengan efek asap WebGL cyan (shader dari
 kartu InfernoCard milik owner); tile kosong tetap kartu gelap biasa. Efeknya
 berhenti otomatis saat night mode (rail disembunyikan) dan saat sistem menyetel
 reduced motion.
+
+## Rekaman terjadwal
+
+Bagian `#rekaman` memutar matan, murottal, atau adzan pada jam yang ditentukan,
+dengan batas jam selesai. Jamnya custom, bukan mengikuti jadwal sholat, jadi
+pergeseran waktu sholat tidak mengubah jadwal rekaman.
+
+**Jaminannya: tidak ada rekaman yang berhenti di tengah ayat.** Batas jam bukan
+tombol pemutus. Server menyusun rencana sebelum file pertama berbunyi dan hanya
+memasukkan file yang muat penuh; file yang tidak muat tidak pernah dibunyikan
+sama sekali, bukan bunyi sebagian. Yang bisa terjadi justru "surah hari ini tidak
+bunyi karena kelamaan", dan itu terlihat di konsol sebelum hari-H.
+
+### Langkah pertama: ukur durasi
+
+Tombol **Ukur semua durasi** membaca panjang tiap file di perpustakaan suara dan
+menyimpannya. Tanpa langkah ini planner akan membuang semua file dengan alasan
+"durasi belum diketahui", jadi tidak ada yang bunyi. Pengukuran ini diulang
+otomatis oleh papan kalau ternyata durasi simpanannya meleset.
+
+### Membaca garis waktu
+
+Setiap slot menggambar jendela berdampingan dengan isinya: panjang jendela, berapa
+yang terpakai, dan file mana yang tidak bunyi beserta alasannya ("Butuh 22:02,
+jendela tinggal 20:54"). Bar yang terisi mentok sebelum ujung jendela berarti
+playlistnya kurang muat. Berapa menit lebih panjang yang dibutuhkan slot ditulis
+di bawahnya.
+
+### Field
+
+- **Mulai / Harus selesai sebelum** — HH:MM zona Asia/Jakarta. Batas yang lebih
+  kecil dari jam mulai dibaca sebagai keesokan hari, jadi slot Isha boleh selesai
+  lewat tengah malam.
+- **Jeda antar rekaman** — diam antara dua file, tidak dipakai setelah file
+  terakhir. File yang berakhir tepat di batas tetap bunyi.
+- **Toleransi telat** — kalau papan menyala lebih lambat dari ini setelah jam
+  mulai, slot dianggap terlewat dan tidak dibunyikan. Ini yang mencegah murottal
+  nyasar jam tiga pagi.
+- **Hari** — kosong berarti setiap hari.
+- **Urutan** — tetap. Baris pertama bunyi pertama.
+
+### Kalau bentrok
+
+Hanya satu rekaman berjalan pada satu waktu. Slot berikutnya yang waktunya tiba
+sambil rekaman pertama masih bunyi dicatat **dilewati, bentrok slot lain** di
+riwayat, dan slot video mufrodat ikut melompati jadwalnya selama rekaman berjalan.
+Mikrofon pengumuman langsung tetap boleh memutus karena bersifat darurat.
+
+### Kalau halaman papan dimuat ulang
+
+Papan melanjutkan run yang sama dari file yang belum selesai, **dari detik
+pertama**. Bukan dari posisi di tengah rekaman, supaya tidak ada ayat yang terputus
+di awal. Riwayat di bawah section menyimpan tayang terakhir beserta alasannya
+(selesai, terlewat, melewati batas jam, dilewati).
 
 ## Kegiatan: suara penanda
 

@@ -338,7 +338,10 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       <section className="panel" id="sholat">
         <div className="panel__head">
           <h2>Kota dan jadwal sholat</h2>
-          <p>Kota menentukan jadwal sholat yang diambil papan. Papan hanya menghitung sisa waktunya, tidak memutar suara.</p>
+          <p>
+            Kota menentukan jadwal sholat yang diambil papan. Papan hanya menghitung sisa waktunya sendiri; rekaman
+            yang berbunyi terjadwal diatur di bagian Rekaman terjadwal.
+          </p>
         </div>
 
         <form action={saveCitySettings} className="field-grid">
