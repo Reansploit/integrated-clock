@@ -295,23 +295,26 @@ select {
    with its own uv mapping, so the smoke runs outward from the edge it belongs to
    instead of only upward.
 
-   Bleeds are read back by the shader from the DOM, so these four numbers are
-   the whole geometry: 30px above, 54px left and 30px right into the list's side
-   margins, and 16px below - under the rail padding's own 16px minimum, so the
-   clip never bites.
+   The top plume is capped against the viewport height because the clear rail
+   above the cards is not a fixed space: it is whatever the prayer list leaves
+   over, which measures 297px at 1080p but only 109px at 720p. A fixed 132px bleed
+   looked fine on a tall window and covered Isha on a short one, so the bleed is
+   the smaller of 88px and 8vh and can never outgrow the gap it lives in.
 
-   The top bleed is small on purpose, which is what the owner's screenshot
-   corrected: at 132px the smoke rose into the prayer list and covered Isha.
-   The space above a card is the list, not clear rail, so the ring reads
-   sideways and below, where the rail really is empty. */
+   Bleeds are read back by the shader from the DOM, so these numbers are the
+   whole geometry: the top above, 54px left and 30px right into the list's side
+   margins, and 13px below - under the rail padding's own minimum, so the rail's
+   overflow clip never bites. */
 .countdown-tile__smoke {
+  --plume-top: min(88px, 8vh);
+  --plume-bottom: 13px;
   position: absolute;
-  top: -30px;
+  top: calc(0px - var(--plume-top));
   left: calc(0px - clamp(16px, 2.8vw, 54px));
   z-index: -1;
   display: block;
   width: calc(100% + clamp(16px, 2.8vw, 54px) + clamp(16px, 1.6vw, 30px));
-  height: calc(100% + 46px);
+  height: calc(100% + var(--plume-top) + var(--plume-bottom));
   pointer-events: none;
 }
 
