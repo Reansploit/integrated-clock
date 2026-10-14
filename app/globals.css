@@ -255,9 +255,12 @@ select {
   display: grid;
   gap: clamp(8px, 0.8vw, 12px);
   margin-top: clamp(12px, 1.2vw, 18px);
-  /* Floating card: this is the clear rail the smoke ring is allowed to use,
-     and the bottom padding is bleed room before the rail's overflow clip. */
-  margin-inline: clamp(16px, 1.6vw, 30px);
+  /* Clear rail the smoke ring is allowed to use: the wide left margin is the
+     left plume, the narrower right one the right plume, and the bottom padding
+     is bleed room before the rail's overflow clip. Above the cards is the
+     prayer list, so nothing bleeds upward into it. */
+  margin-left: clamp(16px, 2.8vw, 54px);
+  margin-right: clamp(16px, 1.6vw, 30px);
   padding-bottom: clamp(16px, 2vh, 30px);
 }
 
@@ -287,42 +290,29 @@ select {
     0 0 24px rgba(141, 215, 255, 0.4);
 }
 
-/* The plume rises from the card: the mass zone (uv ~0.54-0.775) is the only
-   part of this shader with torn structure, so a 132px bleed puts ~67px of it
-   against the top edge and the mask walks alpha down through it - hottest at
-   the card, graying upward - until the uniform burn band survives only as a
-   ghost (the shader's own floor, minP, paints that band solid). Sides stop
-   on the clear margin where the edge fade reads zero; the 15px tail below
-   stays under the rail padding's 16px minimum, so the clip never bites. */
+/* The plume leaves the card on all four sides. The canvas is one element behind
+   the tile and one WebGL context, but the ring is drawn as four strips, each
+   with its own uv mapping, so the smoke runs outward from the edge it belongs to
+   instead of only upward.
+
+   Bleeds are read back by the shader from the DOM, so these four numbers are
+   the whole geometry: 30px above, 54px left and 30px right into the list's side
+   margins, and 16px below - under the rail padding's own 16px minimum, so the
+   clip never bites.
+
+   The top bleed is small on purpose, which is what the owner's screenshot
+   corrected: at 132px the smoke rose into the prayer list and covered Isha.
+   The space above a card is the list, not clear rail, so the ring reads
+   sideways and below, where the rail really is empty. */
 .countdown-tile__smoke {
   position: absolute;
-  top: -132px;
-  left: calc(0px - clamp(16px, 1.6vw, 30px));
+  top: -30px;
+  left: calc(0px - clamp(16px, 2.8vw, 54px));
   z-index: -1;
   display: block;
-  width: calc(100% + 2 * clamp(16px, 1.6vw, 30px));
-  height: calc(100% + 147px);
+  width: calc(100% + clamp(16px, 2.8vw, 54px) + clamp(16px, 1.6vw, 30px));
+  height: calc(100% + 46px);
   pointer-events: none;
-  -webkit-mask-image: linear-gradient(
-    to top,
-    #000 0%,
-    #000 60%,
-    rgba(0, 0, 0, 0.75) 68%,
-    rgba(0, 0, 0, 0.45) 74%,
-    rgba(0, 0, 0, 0.18) 80%,
-    rgba(0, 0, 0, 0.08) 86%,
-    transparent 92%
-  );
-  mask-image: linear-gradient(
-    to top,
-    #000 0%,
-    #000 60%,
-    rgba(0, 0, 0, 0.75) 68%,
-    rgba(0, 0, 0, 0.45) 74%,
-    rgba(0, 0, 0, 0.18) 80%,
-    rgba(0, 0, 0, 0.08) 86%,
-    transparent 92%
-  );
 }
 
 .countdown-tile__label {

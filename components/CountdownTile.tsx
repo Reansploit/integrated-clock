@@ -7,9 +7,19 @@ import { useEffect, useRef, useState } from 'react';
 // never fire and would only be a uniform nobody sets.
 const VERTEX_SRC = `
   attribute vec2 position;
+  uniform vec4 uUvX;
+  uniform vec4 uUvY;
   varying vec2 vUv;
   void main() {
-    vUv = position * 0.5 + 0.5;
+    vec2 local = position * 0.5 + 0.5;
+    // Each edge of the ring needs the plume pointing its own way, so the corner
+    // coordinates are mapped per side. Two affine rows cover rotation and
+    // reflection as well as a plain scale, which is what the shader's own
+    // alpha falloffs then act on: uv.y runs outward from the card, so the mass
+    // band sits at the card edge and dissolves away from it, and uv.x runs along
+    // the edge so the ends fade out at the corners instead of stopping dead.
+    vUv.x = uUvX.x + local.x * uUvX.z + local.y * uUvX.w;
+    vUv.y = uUvY.x + local.x * uUvY.z + local.y * uUvY.w;
     gl_Position = vec4(position, 0.0, 1.0);
   }
 `;
@@ -108,6 +118,33 @@ const FRAGMENT_SRC = `
 // that DESIGN.md reserves for prayer and live-broadcast state.
 const SMOKE_COLOR: [number, number, number] = [0x8d / 255, 0xd7 / 255, 0xff / 255];
 
+/**
+ * Where each edge's plume starts and stops in the shader's own uv space.
+ *
+ * `near` sits against the card, `far` at the strip's outer edge, and the far
+ * value is deliberately a place where this shader's alpha has already died:
+ * uv.y 1.0 is past its top fade (1 - smoothstep(0.82, 0.95)), uv.y 0.0 is past
+ * its bottom fade (smoothstep(0, 0.3)). Walking each strip all the way to one of
+ * those ends is what dissolves the plume into the rail.
+ *
+ * `near` is chosen just short of the burn band instead of inside it. The band
+ * (uv.y ~0.775-0.95) is where the shader's floor, minP, paints a flat solid:
+ * alpha there is still high, so including it puts a hard white bar in the
+ * middle of the smoke. Stopping below it keeps the torn mass zone
+ * (uv.y ~0.68-0.775), which is the only part with real structure, hugging the
+ * card and fading out from there.
+ */
+type SideRange = { near: number; far: number };
+
+const SIDE_RANGE: Record<Side, SideRange> = {
+  top: { near: 0.6, far: 1.0 },
+  bottom: { near: 0.7, far: 0.0 },
+  left: { near: 0.7, far: 0.0 },
+  right: { near: 0.7, far: 0.0 },
+};
+
+type Side = 'top' | 'bottom' | 'left' | 'right';
+
 function createShader(gl: WebGLRenderingContext, type: number, source: string) {
   const shader = gl.createShader(type);
   if (!shader) return null;
@@ -170,32 +207,90 @@ function SmokeCanvas() {
     const timeLoc = gl.getUniformLocation(program, 'uTime');
     const resLoc = gl.getUniformLocation(program, 'uResolution');
     const colorLoc = gl.getUniformLocation(program, 'uCardColor');
+    const uvXLoc = gl.getUniformLocation(program, 'uUvX');
+    const uvYLoc = gl.getUniformLocation(program, 'uUvY');
 
     gl.useProgram(program);
     gl.enableVertexAttribArray(posLoc);
     gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.SCISSOR_TEST);
 
     const start = performance.now() - Math.random() * 40000;
     let rafId = 0;
     let lastDraw = Number.NEGATIVE_INFINITY;
 
-    const resize = () => {
-      const rect = canvas.getBoundingClientRect();
+    /**
+     * The ring is drawn as four strips instead of one full-canvas quad, so each
+     * edge gets its own uv mapping and the plume leaves the card sideways as
+     * well as upward. One canvas and one WebGL context still serve all four;
+     * only the scissor rect and two uniforms change per pass.
+     *
+     * Bleeds are read from the DOM rather than hardcoded, so the CSS stays the
+     * single place that decides how much clear rail the smoke may use.
+     */
+    let strips: Array<{ side: Side; x: number; y: number; w: number; h: number }> = [];
+
+    const measure = () => {
+      const canvasRect = canvas.getBoundingClientRect();
+      const tileRect = canvas.parentElement?.getBoundingClientRect();
+      if (!canvasRect.width || !canvasRect.height || !tileRect) {
+        strips = [];
+        return;
+      }
+
       // 1.5 keeps the smoke crisp on hidpi previews while capping fill rate on
       // the TV, where sub-pixel smoke detail is invisible from the sofa anyway.
       const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-      const width = Math.max(1, Math.round(rect.width * dpr));
-      const height = Math.max(1, Math.round(rect.height * dpr));
+      const width = Math.max(1, Math.round(canvasRect.width * dpr));
+      const height = Math.max(1, Math.round(canvasRect.height * dpr));
       if (canvas.width !== width || canvas.height !== height) {
         canvas.width = width;
         canvas.height = height;
       }
+
+      const topBleed = Math.max(0, (tileRect.top - canvasRect.top) * dpr);
+      const bottomBleed = Math.max(0, (canvasRect.bottom - tileRect.bottom) * dpr);
+      const sideBleed = Math.max(0, (tileRect.left - canvasRect.left) * dpr);
+      // GL's origin is bottom-left, so every rect here is measured from there.
+      const bodyTop = topBleed;
+      const bodyBottom = height - bottomBleed;
+
+      strips = (
+        [
+          { side: 'top', x: 0, y: bodyTop, w: width, h: topBleed },
+          { side: 'bottom', x: 0, y: 0, w: width, h: bottomBleed },
+          { side: 'left', x: 0, y: bodyTop, w: sideBleed, h: bodyBottom - bodyTop },
+          { side: 'right', x: width - sideBleed, y: bodyTop, w: sideBleed, h: bodyBottom - bodyTop },
+        ] satisfies Array<{ side: Side; x: number; y: number; w: number; h: number }>
+      ).filter((strip) => strip.w >= 1 && strip.h >= 1);
     };
-    resize();
-    const observer = new ResizeObserver(resize);
+
+    measure();
+    const observer = new ResizeObserver(measure);
     observer.observe(canvas);
+    if (canvas.parentElement) observer.observe(canvas.parentElement);
+
+    /**
+     * local is 0..1 inside the strip's own rect. Each side maps it so uv.y runs
+     * outward from the card edge (near at the card, far at the rail) and uv.x
+     * runs along the edge, which is what makes the shader's own edge fades
+     * dissolve the strip's ends at the corners.
+     */
+    const uvRows = (side: Side): { x: [number, number, number, number]; y: [number, number, number, number] } => {
+      const { near, far } = SIDE_RANGE[side];
+      switch (side) {
+        case 'top':
+          return { x: [0, 0, 1, 0], y: [near, 0, 0, far - near] };
+        case 'bottom':
+          return { x: [0, 0, 1, 0], y: [far, 0, 0, near - far] };
+        case 'left':
+          return { x: [0, 0, 0, 1], y: [far, 0, near - far, 0] };
+        case 'right':
+          return { x: [0, 0, 0, -1], y: [near, 0, far - near, 0] };
+      }
+    };
 
     const render = (now: number) => {
       rafId = requestAnimationFrame(render);
@@ -205,13 +300,33 @@ function SmokeCanvas() {
       // keeps two tiles cheap on a TV browser.
       if (now - lastDraw < 33) return;
       lastDraw = now;
+      if (!strips.length) return;
+
+      gl.disable(gl.SCISSOR_TEST);
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.enable(gl.SCISSOR_TEST);
+
       gl.uniform1f(timeLoc, (now - start) / 1000);
-      gl.uniform2f(resLoc, canvas.width, canvas.height);
       gl.uniform3f(colorLoc, SMOKE_COLOR[0], SMOKE_COLOR[1], SMOKE_COLOR[2]);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      // One resolution for the whole ring, not one per strip. The shader's burn
+      // band is a function of coord.y in this space, so a per-strip resolution
+      // would draw four differently-shaped bands and cut visible seams where the
+      // strips meet; with the ring's own, the four passes are four windows onto
+      // one continuous pattern.
+      gl.uniform2f(resLoc, canvas.width, canvas.height);
+
+      for (const strip of strips) {
+        const rows = uvRows(strip.side);
+        gl.viewport(strip.x, strip.y, strip.w, strip.h);
+        gl.scissor(strip.x, strip.y, strip.w, strip.h);
+        gl.uniform4fv(uvXLoc, rows.x);
+        gl.uniform4fv(uvYLoc, rows.y);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      }
+
+      gl.disable(gl.SCISSOR_TEST);
     };
     rafId = requestAnimationFrame(render);
 
