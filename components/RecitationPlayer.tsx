@@ -18,7 +18,6 @@ type StatePayload = {
 };
 
 const POLL_INTERVAL_MS = 10_000;
-const AUDIO_UNLOCKED_KEY = 'recitation-audio-unlocked';
 const PROGRESS_KEY = 'recitation-progress';
 const RETRY_DELAY_MS = 900;
 const MAX_PLAY_ERRORS = 3;
@@ -96,7 +95,6 @@ async function reportDuration(url: string, durationMs: number) {
  */
 export function RecitationPlayer() {
   const [broadcast, setBroadcast] = useState<RecitationBroadcast>({ active: false, label: '' });
-  const [audioBlocked, setAudioBlocked] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const retryTimeoutRef = useRef<number | null>(null);
@@ -221,6 +219,17 @@ export function RecitationPlayer() {
         { once: true },
       );
 
+      /**
+       * Start playback, unlocking the browser on the way.
+       *
+       * Chrome refuses audible autoplay until someone touches the board, but it
+       * lets a muted element start, and unmuting an element that is already
+       * playing needs no gesture - the same unlock the announcement signal
+       * primes with. So the first try is audible, and a refusal falls back to
+       * muted playback that unmutes itself; the board never asks for a tap.
+       * Only a refusal of that too - a broken file, a dead output - lands on
+       * the rebuild retry.
+       */
       try {
         const attempt = audio.play();
         if (attempt && typeof attempt.then === 'function') {
@@ -228,24 +237,36 @@ export function RecitationPlayer() {
             .then(() => {
               if (audioRef.current !== audio) return;
               playErrorCountRef.current = 0;
-              setAudioBlocked(false);
               void reportProgress(runKey, 'running');
             })
             .catch(() => {
               if (audioRef.current !== audio) return;
-              // Chrome on the TV blocks playback until someone touches it.
-              setAudioBlocked(true);
-              clearRetryTimer();
-              retryTimeoutRef.current = window.setTimeout(() => {
-                retryTimeoutRef.current = null;
-                playFrom(index);
-              }, RETRY_DELAY_MS);
+              audio.muted = true;
+              void audio
+                .play()
+                .then(() => {
+                  if (audioRef.current !== audio) return;
+                  audio.muted = false;
+                  playErrorCountRef.current = 0;
+                  void reportProgress(runKey, 'running');
+                })
+                .catch(() => {
+                  if (audioRef.current !== audio) return;
+                  clearRetryTimer();
+                  retryTimeoutRef.current = window.setTimeout(() => {
+                    retryTimeoutRef.current = null;
+                    playFrom(index);
+                  }, RETRY_DELAY_MS);
+                });
             });
           return;
         }
-        setAudioBlocked(false);
       } catch {
-        setAudioBlocked(true);
+        clearRetryTimer();
+        retryTimeoutRef.current = window.setTimeout(() => {
+          retryTimeoutRef.current = null;
+          playFrom(index);
+        }, RETRY_DELAY_MS);
       }
     },
     [clearGapTimer, clearRetryTimer, finishRun, stopCurrentAudio],
@@ -284,7 +305,6 @@ export function RecitationPlayer() {
     plannedRef.current = [];
     currentIndexRef.current = 0;
     stopCurrentAudio();
-    setAudioBlocked(false);
     setBroadcast({ active: false, label: '' });
   }, [stopCurrentAudio]);
 
@@ -337,19 +357,6 @@ export function RecitationPlayer() {
   }, [broadcast]);
 
   useEffect(() => {
-    const markUnlocked = () => window.localStorage.setItem(AUDIO_UNLOCKED_KEY, '1');
-    window.addEventListener('pointerdown', markUnlocked, { passive: true });
-    window.addEventListener('keydown', markUnlocked);
-    window.addEventListener('touchstart', markUnlocked, { passive: true });
-
-    return () => {
-      window.removeEventListener('pointerdown', markUnlocked);
-      window.removeEventListener('keydown', markUnlocked);
-      window.removeEventListener('touchstart', markUnlocked);
-    };
-  }, []);
-
-  useEffect(() => {
     return () => {
       clearRetryTimer();
       clearGapTimer();
@@ -366,7 +373,6 @@ export function RecitationPlayer() {
     <div className="recitation-bar" role="status">
       <span className="recitation-bar__dot" aria-hidden="true" />
       <span className="recitation-bar__label">{broadcast.label}</span>
-      {audioBlocked ? <span className="recitation-bar__unlock">Tap to enable audio</span> : null}
     </div>
   );
 }

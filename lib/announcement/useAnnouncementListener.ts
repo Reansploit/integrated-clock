@@ -41,7 +41,10 @@ function createAudioElement() {
   audio.autoplay = true;
   audio.setAttribute('playsinline', 'true');
   audio.preload = 'auto';
-  audio.muted = false;
+  // Muted, then unmuted once play() is accepted: a browser that refuses
+  // audible autoplay still starts a muted element, and unmuting one that is
+  // already playing needs no gesture. The board has no pointer to tap.
+  audio.muted = true;
   audio.volume = 1.0;
   audio.style.position = 'fixed';
   audio.style.left = '-9999px';
@@ -75,7 +78,6 @@ export function useAnnouncementListener(options: AnnouncementListenerOptions) {
   const streamUrl = useMemo(() => options.streamUrl.trim(), [options.streamUrl]);
   const [isLive, setIsLive] = useState(false);
   const [announcementText, setAnnouncementText] = useState('');
-  const [audioBlocked, setAudioBlocked] = useState(false);
   const [peerState, setPeerState] = useState<'idle' | 'connecting' | 'connected' | 'failed'>('idle');
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -196,10 +198,9 @@ export function useAnnouncementListener(options: AnnouncementListenerOptions) {
       audioElement.srcObject = streamToPlay;
       void audioElement.play().then(() => {
         audioPlayPendingRef.current = false;
-        setAudioBlocked(false);
+        audioElement.muted = false;
       }).catch(() => {
         audioPlayPendingRef.current = true;
-        setAudioBlocked(true);
       });
     };
 
@@ -232,9 +233,10 @@ export function useAnnouncementListener(options: AnnouncementListenerOptions) {
     const unlock = () => {
       primeAnnouncementSignal();
       if (audioPlayPendingRef.current && audioRef.current) {
-        void audioRef.current.play().then(() => {
+        const audio = audioRef.current;
+        void audio.play().then(() => {
           audioPlayPendingRef.current = false;
-          setAudioBlocked(false);
+          audio.muted = false;
         }).catch(() => undefined);
       }
     };
@@ -305,7 +307,6 @@ export function useAnnouncementListener(options: AnnouncementListenerOptions) {
       closePeer();
       hideTimeoutRef.current = window.setTimeout(() => {
         setIsLive(false);
-        setAudioBlocked(false);
         setPeerState('idle');
       }, 450);
     };
@@ -418,25 +419,9 @@ export function useAnnouncementListener(options: AnnouncementListenerOptions) {
     };
   }, [streamUrl]);
 
-  function retryAudioPlayback() {
-    if (!audioRef.current) {
-      return;
-    }
-
-    void audioRef.current.play().then(() => {
-      audioPlayPendingRef.current = false;
-      setAudioBlocked(false);
-    }).catch(() => {
-      audioPlayPendingRef.current = true;
-      setAudioBlocked(true);
-    });
-  }
-
   return {
     isLive,
     announcementText,
-    audioBlocked,
-    retryAudioPlayback,
     peerState,
   };
 }

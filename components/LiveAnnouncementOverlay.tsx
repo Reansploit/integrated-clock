@@ -14,7 +14,7 @@ const PEER_LABEL: Record<'idle' | 'connecting' | 'connected' | 'failed', string>
 export function LiveAnnouncementOverlay() {
   const streamUrl = useMemo(() => '/api/announcement/stream', []);
 
-  const { isLive, announcementText, audioBlocked, retryAudioPlayback, peerState } = useAnnouncementListener({ streamUrl });
+  const { isLive, announcementText, peerState } = useAnnouncementListener({ streamUrl });
 
   if (!isLive) {
     return <div className="live-announcement-sr" role="status" aria-live="assertive" aria-atomic="true" />;
@@ -29,12 +29,6 @@ export function LiveAnnouncementOverlay() {
       <div className="live-announcement-overlay" aria-hidden="true">
         <span className="live-announcement-overlay__badge">Live Announcement</span>
         <span className="live-announcement-overlay__peer">Audio {PEER_LABEL[peerState]}</span>
-
-        {audioBlocked ? (
-          <button type="button" className="live-announcement-overlay__unlock" onClick={retryAudioPlayback}>
-            Tap to enable audio
-          </button>
-        ) : null}
       </div>
     </>
   );

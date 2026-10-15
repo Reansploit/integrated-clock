@@ -67,7 +67,7 @@ Lakukan berurutan, centang yang lolos:
 | `npm install` gagal | Internet / proxy | Cek internet, ulangi |
 | Display kosong setelah build | `.env.local` hilang | Copy ulang file itu dari PC asal |
 | Halaman vocab 500 | `data/` tidak bisa ditulis | Pastikan folder tidak read-only / terkunci antivirus |
-| Suara tidak bunyi | Autoplay browser | Klik/sentuh layar sekali dulu |
+| Suara tidak bunyi | Autoplay browser | Murottal & pengumuman langsung sudah auto-unlock; audio kartu vocab masih butuh satu klik di display |
 
 ## 6. Rutin setelah deploy
 

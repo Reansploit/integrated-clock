@@ -1533,16 +1533,6 @@ html.vocab-takeover .ticker {
   animation: recitationPulse 2.4s ease-in-out infinite;
 }
 
-/* Chrome on the TV refuses to play until something is touched. Saying so on the
-   board, in the same position the announcement uses for its own unlock, is the
-   difference between a silent room and a working recitation. */
-.recitation-bar__unlock {
-  border-left: 1px solid var(--line-strong);
-  padding-left: 0.7rem;
-  color: #8dd7ff;
-  font-weight: 500;
-}
-
 @keyframes recitationPulse {
   0%,
   100% {
@@ -1586,20 +1576,6 @@ html.vocab-takeover .ticker {
   color: var(--muted);
   font-size: 0.9rem;
   font-weight: 500;
-}
-
-.live-announcement-overlay__unlock {
-  position: absolute;
-  bottom: 20px;
-  left: 20px;
-  pointer-events: auto;
-  cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.72);
-  color: var(--text);
-  padding: 8px 12px;
-  font-size: 0.85rem;
 }
 
 /* The speech itself goes to a screen reader, not to the wall. */
