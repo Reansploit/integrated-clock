@@ -255,21 +255,19 @@ select {
   display: grid;
   gap: clamp(8px, 0.8vw, 12px);
   margin-top: clamp(12px, 1.2vw, 18px);
-  /* Clear rail the smoke ring is allowed to use: the wide left margin is the
-     left plume, the narrower right one the right plume, and the bottom padding
-     is bleed room before the rail's overflow clip. Above the cards is the
-     prayer list, so nothing bleeds upward into it. */
+  /* Clear rail the four plumes live in, and the floor the rail's overflow clip
+     enforces. Each plume reaches 0.70 of its depth past its card (the rest sits
+     under the card), so these margins and this padding must match the plume
+     depths in .countdown-tile__plume or the clip cuts them visibly. Above the
+     cards is the prayer list, so nothing bleeds upward into it. */
   margin-left: clamp(16px, 2.8vw, 54px);
   margin-right: clamp(16px, 1.6vw, 30px);
-  /* Bottom bleed room for the plume under the last card, and the floor the
-     plume has to stay inside: the smoke canvas is clipped by the rail, so it
-     may never be taller than this padding or the clip cuts it visibly. */
-  padding-bottom: clamp(34px, 4.6vh, 56px);
+  padding-bottom: clamp(50px, 6.8vh, 74px);
 }
 
 /* The reference look: smoke circles the card from outside while the card stays
    a clean opaque panel. Never give this element z-index, transform, filter or
-   opacity - any of those makes it a stacking context and the -1 smoke wrapper
+   opacity - any of those makes it a stacking context and the -1 plumes
    would flip in front of the card instead of behind it. */
 .countdown-tile {
   position: relative;
@@ -293,55 +291,83 @@ select {
     0 0 24px rgba(141, 215, 255, 0.4);
 }
 
-/* The plume leaves the card on all four sides. The canvas is one element behind
-   the tile and one WebGL context, but the ring is drawn as four strips, each
-   with its own uv mapping, so the smoke runs outward from the edge it belongs to
-   instead of only upward.
+/* The plume leaves the card on all four sides: one canvas per side, oriented
+   in CSS, so the shader keeps the uv space it was written for. Its uv.y runs
+   outward from the card edge, which is what puts the burn line on the edge and
+   the falloff in the rail.
 
-   The top plume is capped against the viewport height because the clear rail
-   above the cards is not a fixed space: it is whatever the prayer list leaves
-   over, which measures 280px at 1080p but only 129px at 768. A fixed 132px bleed
-   looked fine on a tall window and covered Isha on a short one, so the bleed is
-   the smaller of 88px and 11vh and can never outgrow the gap it lives in.
-
-   The bottom is capped against the list's own padding-bottom, which is where it
-   lives; stay inside that and the rail's overflow clip has nothing to bite. Both
-   are far larger than the 13px this started with, because a plume needs pixels
-   to be a plume: below about twenty, the shader's own noise is finer than the
-   strip and renders as blocks rather than smoke.
-
-   This element owns the geometry and the -1. It is a separate element from the
-   canvas because the canvas carries a blur, and a filter makes a stacking
-   context: on a single element the -1 would refer to that context alone and the
-   smoke would come out in front of the card.
-
-   Bleeds are read back by the shader from the DOM, so these numbers are the
-   whole geometry: the top above, 54px left and 30px right into the list's side
-   margins, and the plume below. */
-.countdown-tile__smoke {
-  --plume-top: min(88px, 11vh);
-  --plume-bottom: min(44px, 4.4vh);
+   Each plume reaches 0.30 of its own depth under the card - and 0.30, not the
+   reference's 0.14, because this card sits on top of the plume instead of under
+   it. The shader clips everything from uv.y 0.69 up to solid white (its burn
+   band), so at 0.14 that band shows as a hard white bar floating beside the
+   card; at 0.30 the bar is hidden and what remains starts as a cyan rim on the
+   edge and tapers outward as smoke. Depth sizes must stay inside the clear rail
+   in .rail__countdowns: the top is capped against the gap over the cards, and
+   the sides and bottom against the list's own margins and padding. */
+.countdown-tile__plume {
+  --plume-top: min(110px, 10.5vh);
+  --plume-bottom: min(64px, 6.5vh);
+  --plume-side-left: clamp(16px, 2.8vw, 54px);
+  --plume-side-right: clamp(16px, 1.6vw, 30px);
   position: absolute;
-  top: calc(0px - var(--plume-top));
-  left: calc(0px - clamp(16px, 2.8vw, 54px));
   z-index: -1;
-  width: calc(100% + clamp(16px, 2.8vw, 54px) + clamp(16px, 1.6vw, 30px));
-  height: calc(100% + var(--plume-top) + var(--plume-bottom));
   pointer-events: none;
 }
 
-/* The blur is what turns this into smoke. The shader behind it is a flame
-   program: its alpha cuts near-binary on brightness, its colour clips to white,
-   and its 2D hash is weak enough to band. Wrapped into a ring this thin it can
-   only ever resolve into hard-edged blobs, thorns or shards, whichever way its
-   uv is mapped - which is exactly what it kept doing across eight mappings.
-   Softening the result afterwards costs one filter and is not something a
-   mapping has to be coaxed into. */
-.countdown-tile__smoke-canvas {
+/* scaleY(-1) points the canvas's uv.y=1 end at the card, the same way the
+   reference flips its top plume. */
+.countdown-tile__plume--top {
+  left: 0;
+  width: 100%;
+  height: var(--plume-top);
+  bottom: calc(100% - var(--plume-top) * 0.3);
+  transform: scaleY(-1);
+}
+
+.countdown-tile__plume--bottom {
+  left: 0;
+  width: 100%;
+  height: var(--plume-bottom);
+  top: calc(100% - var(--plume-bottom) * 0.3);
+}
+
+.countdown-tile__plume--left {
+  top: 0;
+  right: calc(100% - var(--plume-side-left) * 0.3);
+  width: var(--plume-side-left);
+  height: 100%;
+}
+
+.countdown-tile__plume--right {
+  top: 0;
+  left: calc(100% - var(--plume-side-right) * 0.3);
+  width: var(--plume-side-right);
+  height: 100%;
+}
+
+.countdown-tile__plume-canvas {
   display: block;
   width: 100%;
   height: 100%;
-  filter: blur(9px);
+}
+
+/* A side canvas is laid out along the card and then rotated onto the edge, as
+   in the reference: rotate(90deg) sends its uv.y=1 end leftward, toward a card
+   the plume sits left of. Its along-card size comes from JS, because CSS has
+   no cross-axis length to size it against the frame's height. */
+.countdown-tile__plume--left .countdown-tile__plume-canvas,
+.countdown-tile__plume--right .countdown-tile__plume-canvas {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+}
+
+.countdown-tile__plume--left .countdown-tile__plume-canvas {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.countdown-tile__plume--right .countdown-tile__plume-canvas {
+  transform: translate(-50%, -50%) rotate(-90deg);
 }
 
 .countdown-tile__label {
