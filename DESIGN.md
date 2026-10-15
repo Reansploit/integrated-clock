@@ -84,6 +84,9 @@ stay neutral.
   that actually hold a date: an unset tile stays static, rendering pauses during
   night mode while the rail is hidden, and `prefers-reduced-motion` disables it
   the same way the ticker is disabled.
+- The smoke ignites only in the last 14 days (H-14 through the day itself),
+  owner request: the InfernoCard appears when 14 days remain until the target
+  day. A date further out keeps its day count on a quiet, unlit card.
 
 ## The control console
 

@@ -15,6 +15,16 @@ import { resolveAssetUrl } from '@/lib/media';
 
 export const revalidate = 60;
 
+// The InfernoCard earns its smoke only in the final stretch: a countdown card
+// lights at H-14 and stays lit through the day itself, and a date further out
+// keeps its day count on a quiet, unlit card. Owner request: the card appears
+// when 14 days remain until the target day.
+const SMOKE_WITHIN_DAYS = 14;
+
+type Countdown = { text: string; days: number | null };
+
+const ignites = (c: Countdown) => c.days !== null && c.days <= SMOKE_WITHIN_DAYS;
+
 const hijriFormatter = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura', {
   day: 'numeric',
   month: 'long',
@@ -54,21 +64,22 @@ export default async function Home() {
   })();
 
   // Empty or past dates render as a bare dash: no countdown, no apology text.
-  const countdownText = (isoDate: string) => {
+  // days stays null there, so nothing downstream can light such a card up.
+  const countdown = (isoDate: string): Countdown => {
     const match = isoDate.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!match) return '-';
+    if (!match) return { text: '-', days: null };
     const year = Number(match[1]);
     const month = Number(match[2]);
     const day = Number(match[3]);
     const target = Date.UTC(year, month - 1, day);
     const check = new Date(target);
     if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) {
-      return '-';
+      return { text: '-', days: null };
     }
     const days = Math.round((target - jakartaTodayStart) / 86_400_000);
-    if (days < 0) return '-';
-    if (days === 0) return 'Today';
-    return days === 1 ? '1 day' : `${days} days`;
+    if (days < 0) return { text: '-', days: null };
+    if (days === 0) return { text: 'Today', days: 0 };
+    return { text: days === 1 ? '1 day' : `${days} days`, days };
   };
   // ICU's English Islamic output orders month first ("Rabiʻ II 22, 1448 AH",
   // US order). Readers here expect day first, so the parts are reassembled
@@ -112,6 +123,9 @@ export default async function Home() {
         backgroundRepeat: 'no-repeat',
       }
     : undefined;
+
+  const homecoming = countdown(data.settings.homecomingDate);
+  const exam = countdown(data.settings.examDate);
 
   return (
     <main className="page-shell">
@@ -176,8 +190,8 @@ export default async function Home() {
           <h2 className="rail__title">Prayer Times</h2>
           <PrayerTimesPanel prayerTimes={prayerTimes} initialNextPrayer={nextPrayer} />
           <div className="rail__countdowns">
-            <CountdownTile label="Going Home" value={countdownText(data.settings.homecomingDate)} />
-            <CountdownTile label="Exam" value={countdownText(data.settings.examDate)} />
+            <CountdownTile label="Going Home" value={homecoming.text} ignite={ignites(homecoming)} />
+            <CountdownTile label="Exam" value={exam.text} ignite={ignites(exam)} />
           </div>
         </aside>
       </div>

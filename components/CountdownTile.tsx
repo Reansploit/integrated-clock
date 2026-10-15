@@ -323,25 +323,29 @@ function SmokePlume({ side, hovered }: PlumeProps) {
 type CountdownTileProps = {
   label: string;
   value: string;
+  /** The board's call: true once the date sits inside its H-14 window. */
+  ignite: boolean;
 };
 
 /**
- * One countdown under the prayer list. A filled date (anything but the empty
- * dash) lights the tile with four cyan plumes, one per side; an unset date
- * stays a quiet dark card, so the board never claims a countdown that does not
- * exist.
+ * One countdown under the prayer list. A set date inside the ignition window
+ * (H-14 through the day itself) lights the tile with four cyan plumes, one per
+ * side; a date further out keeps its day count on a quiet dark card, and an
+ * unset one stays quiet with a dash - so the board never burns before the final
+ * stretch, and never claims a countdown that does not exist.
  */
-export function CountdownTile({ label, value }: CountdownTileProps) {
+export function CountdownTile({ label, value, ignite }: CountdownTileProps) {
   const filled = value.trim() !== '' && value.trim() !== '-';
+  const live = filled && ignite;
   const [hovered, setHovered] = useState(false);
 
   return (
     <div
-      className={`countdown-tile${filled ? ' countdown-tile--live' : ''}`}
+      className={`countdown-tile${live ? ' countdown-tile--live' : ''}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {filled ? (
+      {live ? (
         <>
           <SmokePlume side="top" hovered={hovered} />
           <SmokePlume side="bottom" hovered={hovered} />
