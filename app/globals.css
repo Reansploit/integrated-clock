@@ -261,13 +261,16 @@ select {
      prayer list, so nothing bleeds upward into it. */
   margin-left: clamp(16px, 2.8vw, 54px);
   margin-right: clamp(16px, 1.6vw, 30px);
-  padding-bottom: clamp(16px, 2vh, 30px);
+  /* Bottom bleed room for the plume under the last card, and the floor the
+     plume has to stay inside: the smoke canvas is clipped by the rail, so it
+     may never be taller than this padding or the clip cuts it visibly. */
+  padding-bottom: clamp(34px, 4.6vh, 56px);
 }
 
 /* The reference look: smoke circles the card from outside while the card stays
    a clean opaque panel. Never give this element z-index, transform, filter or
-   opacity - any of those makes it a stacking context and the -1 canvas would
-   flip in front of the card instead of behind it. */
+   opacity - any of those makes it a stacking context and the -1 smoke wrapper
+   would flip in front of the card instead of behind it. */
 .countdown-tile {
   position: relative;
   display: flex;
@@ -297,25 +300,48 @@ select {
 
    The top plume is capped against the viewport height because the clear rail
    above the cards is not a fixed space: it is whatever the prayer list leaves
-   over, which measures 297px at 1080p but only 109px at 720p. A fixed 132px bleed
+   over, which measures 280px at 1080p but only 129px at 768. A fixed 132px bleed
    looked fine on a tall window and covered Isha on a short one, so the bleed is
-   the smaller of 88px and 8vh and can never outgrow the gap it lives in.
+   the smaller of 88px and 11vh and can never outgrow the gap it lives in.
+
+   The bottom is capped against the list's own padding-bottom, which is where it
+   lives; stay inside that and the rail's overflow clip has nothing to bite. Both
+   are far larger than the 13px this started with, because a plume needs pixels
+   to be a plume: below about twenty, the shader's own noise is finer than the
+   strip and renders as blocks rather than smoke.
+
+   This element owns the geometry and the -1. It is a separate element from the
+   canvas because the canvas carries a blur, and a filter makes a stacking
+   context: on a single element the -1 would refer to that context alone and the
+   smoke would come out in front of the card.
 
    Bleeds are read back by the shader from the DOM, so these numbers are the
    whole geometry: the top above, 54px left and 30px right into the list's side
-   margins, and 13px below - under the rail padding's own minimum, so the rail's
-   overflow clip never bites. */
+   margins, and the plume below. */
 .countdown-tile__smoke {
-  --plume-top: min(88px, 8vh);
-  --plume-bottom: 13px;
+  --plume-top: min(88px, 11vh);
+  --plume-bottom: min(44px, 4.4vh);
   position: absolute;
   top: calc(0px - var(--plume-top));
   left: calc(0px - clamp(16px, 2.8vw, 54px));
   z-index: -1;
-  display: block;
   width: calc(100% + clamp(16px, 2.8vw, 54px) + clamp(16px, 1.6vw, 30px));
   height: calc(100% + var(--plume-top) + var(--plume-bottom));
   pointer-events: none;
+}
+
+/* The blur is what turns this into smoke. The shader behind it is a flame
+   program: its alpha cuts near-binary on brightness, its colour clips to white,
+   and its 2D hash is weak enough to band. Wrapped into a ring this thin it can
+   only ever resolve into hard-edged blobs, thorns or shards, whichever way its
+   uv is mapped - which is exactly what it kept doing across eight mappings.
+   Softening the result afterwards costs one filter and is not something a
+   mapping has to be coaxed into. */
+.countdown-tile__smoke-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: blur(9px);
 }
 
 .countdown-tile__label {

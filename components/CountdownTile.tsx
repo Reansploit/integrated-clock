@@ -29,6 +29,7 @@ const FRAGMENT_SRC = `
   uniform float uTime;
   uniform vec2 uResolution;
   uniform vec3 uCardColor;
+  uniform float uOctaves;
   varying vec2 vUv;
 
   float hash(float x) { return fract(21654.6512 * sin(385.51 * x)); }
@@ -44,9 +45,21 @@ const FRAGMENT_SRC = `
     return mix(a, b, fr.y);
   }
 
+  // The octave count is a uniform, not a literal, because how much detail a
+  // strip can carry depends on how many pixels it has. Each octave doubles the
+  // frequency, and once a period falls under a pixel it stops being smoke and
+  // becomes aliasing - which is exactly what happened to the bottom edge when
+  // its plume was 13px tall and carried the shader's full five octaves: the
+  // last one landed under a pixel and rendered as a band of hard blocks.
+  //
+  // The CPU works out how many octaves still fit at three pixels per period
+  // and passes that in, so a thin strip gets fewer, softer octaves and a tall
+  // one gets more. The loop bound stays constant, as GLSL ES 1.0 requires; the
+  // uniform only ends it early.
   float fbm(vec2 p) {
     float v = 0.0, f = 1.0, a = 0.5;
     for (int i = 0; i < 5; i++) {
+      if (float(i) >= uOctaves) break;
       v += noise(p * f) * a;
       f *= 2.0;
       a *= 0.5;
@@ -67,7 +80,15 @@ const FRAGMENT_SRC = `
 
     vec3 cardColor = uCardColor;
 
-    float minP = smoothstep(0.3, 0.8, uv.y) * 0.45;
+    // 0.58 rather than this shader's 0.45, and the whole point is where it lands.
+    // The colour gate below opens at p ~0.305, so a floor of 0.225 at the card
+    // edge sits well under it: whether the plume shows at all came down to
+    // whether the drifting fbm happened to be high that second, and the ring
+    // would fade out and back in over time. 0.58 puts the floor just under the
+    // gate instead, so the noise only has to tip it, and the ring stays present
+    // while still varying - and still well clear of the burn band above, where
+    // a floor this size would light the whole strip at once.
+    float minP = smoothstep(0.3, 0.8, uv.y) * 0.58;
     p = max(p, minP);
 
     float edgeDamp = smoothstep(0.0, 0.20, uv.x) * smoothstep(0.0, 0.20, 1.0 - uv.x);
@@ -103,6 +124,12 @@ const FRAGMENT_SRC = `
     col = min(col, vec3(7.5));
 
     float brightness = max(col.r, max(col.g, col.b));
+    // The shader's own ramp, unmodified. It is steep - a fifth of a unit from
+    // invisible to opaque - which is why the plume used to resolve into
+    // hard-edged lozenges, but that is the CSS blur's job to fix now, and this
+    // ramp is also where the smoke gets its density. Widening it to soften the
+    // edges cost both: at a mean brightness near 0.14 a ramp ending at 0.45 left
+    // the plume under a fifth opaque, and the ring all but disappeared.
     float alpha = smoothstep(0.02, 0.12, brightness);
     alpha *= smoothstep(0.0, 0.3, uv.y);
     alpha *= 1.0 - smoothstep(0.82, 0.95, uv.y);
@@ -132,22 +159,83 @@ type Strip = {
   uvX: UvRow;
   /** Runs outward from the card edge, hot against the card and gone at the rail. */
   uvY: UvRow;
+  /** How far coord.x is stretched, solved so the noise drifts outward. */
+  aspect: number;
+  /** How many octaves this strip's pixels can carry before aliasing. */
+  octaves: number;
 };
+
+// How much longer the noise runs across a plume than along it, which is what
+// makes smoke stream off an edge instead of sitting in round puffs. Two and a
+// half is not arbitrary, it is where this stopped looking like spikes: at four,
+// a three-octave strip resolves each blob as one hard-tipped thorn, and at one
+// they go back to being circles.
+const NOISE_STRETCH = 2.5;
+const MIN_OCTAVES = 3;
+// The most coord units one pixel may be worth and still leave MIN_OCTAVES
+// octaves: octave MIN_OCTAVES-1 runs at 2^(MIN_OCTAVES-1) times the base.
+const DETAIL_BUDGET = 1 / (3 * Math.pow(2, MIN_OCTAVES - 1));
+
+/**
+ * Shapes one strip's noise: how stretched it is, and how many octaves its
+ * pixels can hold.
+ *
+ * rateY is the coord units one pixel is worth across the plume, and perAspect
+ * is that same figure per unit of the aspect ratio the shader multiplies coord.x
+ * by. Solving rateX = NOISE_STRETCH * rateY for that ratio stretches the noise
+ * that many times longer across the plume than along it, which is what makes
+ * smoke stream away from the edge it is leaving instead of sitting in round
+ * puffs. Because it is solved rather than guessed, a 340x83 strip and a 37x100
+ * one come out with the same outward drift, and four strips of very different
+ * shape still read as one ring.
+ *
+ * The stretch is not applied unconditionally, because stretching costs detail:
+ * the thinner a strip is, the less of its noise budget the stretch may spend
+ * before the octaves run out, and one octave is not smoke, it is a row of blobs.
+ * So the aspect is the smaller of the two - the one the drift wants and the one
+ * the detail budget allows - with MIN_OCTAVES held back as the floor.
+ *
+ * The octave count itself follows from the geometry. Octave i runs at frequency
+ * 2^i, so the last octave worth keeping is the one whose period is still three
+ * pixels - the Nyquist limit plus headroom, since this animates and shimmer
+ * reads worse on a wall board than a missing octave does. This is also why the
+ * aspect ratio no longer needs clamping on its own account: a 13px-tall strip
+ * used to be handed all five octaves the shader ships with, its top two landed
+ * finer than a pixel, and that is what rendered its plume as hard blocks.
+ *
+ * Guards on finiteness rather than on zero: a strip one dimension short
+ * divides by that dimension, and the rates come back as Infinity, not as 0.
+ * Two Infinities in the ratio below would be NaN, and NaN would reach
+ * gl.uniform2f as a silent no-op and leave a strip drawing the previous
+ * frame's noise. Such a strip is dropped by the size filter anyway - this only
+ * has to keep it harmless until then.
+ */
+function shapeNoise(uvX: UvRow, uvY: UvRow, w: number, h: number) {
+  const rateY = 2 * Math.max(Math.abs(uvY[2]) / w, Math.abs(uvY[3]) / h);
+  const perAspect = 2 * Math.max(Math.abs(uvX[2]) / w, Math.abs(uvX[3]) / h);
+  if (!Number.isFinite(rateY) || !Number.isFinite(perAspect)) return { aspect: 1, octaves: 1 };
+
+  const forDrift = (NOISE_STRETCH * rateY) / perAspect;
+  const forDetail = DETAIL_BUDGET / perAspect;
+  const aspect = Math.min(12, Math.max(0.8, Math.min(forDrift, forDetail)));
+  const rate = Math.max(aspect * perAspect, rateY);
+  return { aspect, octaves: Math.min(5, Math.max(1, Math.floor(Math.log2(1 / (3 * rate)) + 1))) };
+}
 
 /**
  * The outward axis of each side, in the shader's own uv space.
  *
- * Everything here stays below uv.y ~0.55, and that is the whole trick. Above
- * that the shader runs into its own fire: `burnpoint = 0.65` divides colour by
- * |coord.y - 0.65| and `col = min(col, cardColor * 5.6)` clips the result, so any
- * pixel with p above ~0.6 turns solid white. Its floor, minP, already reads
- * 0.25 by uv.y 0.7, so there is no room up there for a plume that stays smoke.
- * Mapping a strip down to uv.y 0 walks straight into that wall - which is what
- * put a bright slab against the card before.
+ * Everything here stays below uv.y ~0.55, and that ceiling is the whole trick.
+ * Above it the shader runs into its own fire: `burnpoint = 0.65` divides colour
+ * by |coord.y - 0.65| and `col = min(col, cardColor * 5.6)` clips the result, so
+ * any pixel with p above ~0.6 turns solid white. At uv.y 0.62 its floor, minP,
+ * already reads past the shader's own colour gate, which lights the whole strip
+ * at once and leaves the fbm peaks as hard white shards rather than smoke.
+ * 0.55 keeps the floor just under that gate, so the plume is lit by the noise
+ * itself and stays patchy and soft.
  *
- * So each strip climbs from 0.55 at the card edge down to 0.10 outward, where
- * `alpha *= smoothstep(0, 0.3, uv.y)` has carried the plume to nothing and
- * minP has fallen to zero, leaving plain fbm wisps to fade out on their own.
+ * The far end walks to where `alpha *= smoothstep(0, 0.3, uv.y)` has carried the
+ * plume to nothing, leaving plain fbm wisps to dissolve on their own.
  *
  * The sign is what makes each side face outward: local.y increases upward in GL,
  * and local.x increases rightward, so a strip below or beside the card counts
@@ -222,6 +310,7 @@ function SmokeCanvas() {
     const timeLoc = gl.getUniformLocation(program, 'uTime');
     const resLoc = gl.getUniformLocation(program, 'uResolution');
     const colorLoc = gl.getUniformLocation(program, 'uCardColor');
+    const octavesLoc = gl.getUniformLocation(program, 'uOctaves');
     const uvXLoc = gl.getUniformLocation(program, 'uUvX');
     const uvYLoc = gl.getUniformLocation(program, 'uUvY');
 
@@ -255,9 +344,16 @@ function SmokeCanvas() {
 
     const measure = () => {
       const canvasRect = canvas.getBoundingClientRect();
-      const tileRect = canvas.parentElement?.getBoundingClientRect();
+      // The card, not the canvas's parent - the canvas lives inside a wrapper
+      // that carries its own blur, and that wrapper is the same shape as the
+      // canvas, so measuring against it would report no bleed at all.
+      const tileRect = canvas.closest('.countdown-tile')?.getBoundingClientRect();
       if (!canvasRect.width || !canvasRect.height || !tileRect) {
         strips = [];
+        // Cleared rather than left stale: a harness reading these on a
+        // hidden canvas would otherwise check the previous size's strips.
+        canvas.dataset.octaves = '';
+        canvas.dataset.strips = '';
         return;
       }
 
@@ -276,8 +372,15 @@ function SmokeCanvas() {
       const topBleed = Math.max(0, (tileRect.top - canvasRect.top) * dpr);
       const bottomBleed = Math.max(0, (canvasRect.bottom - tileRect.bottom) * dpr);
 
-      // GL's origin is bottom-left, so every rect here is measured from there.
-      const bodyTop = topBleed;
+      // GL's origin is the bottom-left corner, so these rects are measured from
+      // there and NOT from the top the way the bleeds above were. The card's top
+      // edge sits at ringH - topBleed and its bottom edge at bottomBleed, which
+      // is why the top strip is anchored by subtracting and the side strips are
+      // anchored by the bottom bleed. Using the top bleed directly for either of
+      // them - which is what bodyTop did - slides the strip upward by the
+      // difference between the two bleeds, so it hangs over the card's top
+      // corner and the half of it left above the card reads as a stray bright
+      // bar rather than as a plume leaving that side.
       const cardW = Math.max(1, ringW - leftBleed - rightBleed);
       const cardH = Math.max(1, ringH - topBleed - bottomBleed);
 
@@ -291,21 +394,33 @@ function SmokeCanvas() {
       const alongCardHeight: UvRow = [0, 0, 0, 1];
       const alongCardHeightFlipped: UvRow = [1, 0, 0, -1];
 
-      strips = (
-        [
-          { x: 0, y: bodyTop, w: ringW, h: topBleed, uvX: alongCardWidth, uvY: SIDE_RANGE.top },
-          { x: 0, y: 0, w: ringW, h: bottomBleed, uvX: alongCardWidth, uvY: SIDE_RANGE.bottom },
-          { x: 0, y: bodyTop, w: leftBleed, h: cardH, uvX: alongCardHeight, uvY: SIDE_RANGE.left },
-          {
-            x: ringW - rightBleed,
-            y: bodyTop,
-            w: rightBleed,
-            h: cardH,
-            uvX: alongCardHeightFlipped,
-            uvY: SIDE_RANGE.right,
-          },
-        ] satisfies Strip[]
-      ).filter((strip) => strip.w >= 1 && strip.h >= 1);
+      // The aspect and octave count come from the strip's own geometry, so each
+      // edge is shaped and limited on its own terms. Since the strips already
+      // fade to nothing at the card's corners, no two of them ever have to agree
+      // about a shared pattern.
+      const strip = (x: number, y: number, w: number, h: number, uvX: UvRow, uvY: UvRow): Strip => {
+        const { aspect, octaves } = shapeNoise(uvX, uvY, w, h);
+        return { x, y, w, h, uvX, uvY, aspect, octaves };
+      };
+
+      strips = [
+        strip(0, ringH - topBleed, ringW, topBleed, alongCardWidth, SIDE_RANGE.top),
+        strip(0, 0, ringW, bottomBleed, alongCardWidth, SIDE_RANGE.bottom),
+        strip(0, bottomBleed, leftBleed, cardH, alongCardHeight, SIDE_RANGE.left),
+        strip(ringW - rightBleed, bottomBleed, rightBleed, cardH, alongCardHeightFlipped, SIDE_RANGE.right),
+      ].filter((s) => s.w >= 1 && s.h >= 1);
+
+      // Read back for the drive harness: this is the one number in the effect
+      // that nothing on screen can tell you, and getting it wrong shows up as
+      // either aliasing or featureless puffs rather than as a wrong value.
+      canvas.dataset.octaves = strips.map((s) => `${s.octaves}@${s.aspect.toFixed(1)}`).join(',');
+      // And the strip rects, in GL's bottom-up form. Nothing on screen reveals
+      // that a strip is drawn a few tens of pixels above the edge it belongs to
+      // - it just looks like a stray bar near a corner - so the harness reads
+      // these and checks each one against the card's own box.
+      canvas.dataset.strips = strips
+        .map((s) => [s.x, s.y, s.w, s.h].map((n) => Math.round(n)).join(','))
+        .join(';');
     };
 
     measure();
@@ -335,14 +450,12 @@ function SmokeCanvas() {
       for (const strip of strips) {
         gl.viewport(strip.x, strip.y, strip.w, strip.h);
         gl.scissor(strip.x, strip.y, strip.w, strip.h);
-        // Each strip resolves its own resolution, which is what makes its noise
-        // isotropic in its own pixels: the shader scales coord.x by
-        // width/height, so a strip's proportions become the shape of its wisps.
-        // A 483x30 strip gets long horizontal streaks, a 54x140 one gets tall
-        // vertical ones, and both read as smoke leaving that edge. Sharing one
-        // resolution across the ring would instead give every strip the ring's
-        // 2.6:1 ratio, which leaves the side plumes as small round blobs.
-        gl.uniform2f(resLoc, strip.w, strip.h);
+        // Only the ratio reaches the shader - it divides x by y - so the pair is
+        // aspect and a fixed 100 rather than real pixels. Real pixel sizes would
+        // reintroduce exactly the per-strip frequency this whole calculation
+        // exists to control.
+        gl.uniform2f(resLoc, strip.aspect * 100, 100);
+        gl.uniform1f(octavesLoc, strip.octaves);
         gl.uniform4fv(uvXLoc, strip.uvX);
         gl.uniform4fv(uvYLoc, strip.uvY);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -371,9 +484,14 @@ function SmokeCanvas() {
   }, [generation]);
 
   // width/height start at 0 so a probe can tell "never initialized" (no WebGL)
-  // apart from a drawn backing store.
+  // apart from a drawn backing store. The canvas is wrapped rather than styled
+  // directly because its blur creates a stacking context: put either the filter
+  // or the -1 on the same element and the -1 starts referring to that context
+  // alone, and the smoke renders in front of the card instead of behind it.
   return (
-    <canvas ref={canvasRef} className="countdown-tile__smoke" width={0} height={0} aria-hidden="true" />
+    <div className="countdown-tile__smoke" aria-hidden="true">
+      <canvas ref={canvasRef} className="countdown-tile__smoke-canvas" width={0} height={0} />
+    </div>
   );
 }
 
