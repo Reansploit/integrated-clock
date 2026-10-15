@@ -673,7 +673,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/aac"
               required
             />
-            <small>mp3, wav, ogg, m4a, atau aac, maksimal 20 MB. Mengunggah lagi dengan nama sama akan menimpa.</small>
+            <small>mp3, wav, ogg, m4a, atau aac, maksimal 100 MB. Mengunggah lagi dengan nama sama akan menimpa.</small>
           </label>
           <div className="field-grid__actions">
             <SubmitButton pendingLabel="Mengunggah">Unggah suara</SubmitButton>

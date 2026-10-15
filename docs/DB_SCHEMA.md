@@ -7,7 +7,7 @@ tambah tabel/kolom baru langsung di `bootstrapDatabase()` dengan `IF NOT EXISTS`
 
 - `settings(key PK, value)`: config display: kota, URL suara bawaan kegiatan, gambar layar, minggu bahasa (`languageWeek`: `arab`/`english`), dan state playback video. Teks berjalan tidak ada di sini, sudah pindah ke `ticker_items`.
 - `events(title, day, start, end_time, sound_url, note)`: jadwal kegiatan per hari (`senin`..`minggu`).
-- `event_sounds(original_name UNIQUE, mime_type, file_ext, size_bytes, audio_data BLOB)`: perpustakaan suara (maks 20 MB/file).
+- `event_sounds(original_name UNIQUE, mime_type, file_ext, size_bytes, audio_data BLOB)`: perpustakaan suara (maks 100 MB/file).
 - `mufrodat(arabic, translation)`: kosakata untuk kotak kanan bawah papan. Data kartu takeover yang lebih lengkap masuk `vocab_items`.
 - `mufrodat_videos(original_name, relative_path UNIQUE, mime_type, size_bytes, sort_order)`: file fisik di `assets/videos/mufrodat/`.
 - `ticker_items(text, sort_order)`: baris teks berjalan. Satu baris di tabel ini = satu baris di kotak bawah papan.

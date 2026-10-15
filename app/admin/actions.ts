@@ -87,7 +87,7 @@ function readDayList(formData: FormData): string {
     .join(',');
 }
 
-const MAX_EVENT_SOUND_SIZE_BYTES = 20 * 1024 * 1024;
+const MAX_EVENT_SOUND_SIZE_BYTES = 100 * 1024 * 1024;
 const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
 const MAX_BACKGROUND_SIZE_BYTES = 10 * 1024 * 1024;
 const allowedEventSoundExtensions = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac']);

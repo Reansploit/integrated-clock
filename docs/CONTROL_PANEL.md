@@ -165,7 +165,7 @@ Berikutnya menggeser kartu yang tampil di papan (menulis
 
 |_Unggahan_| Format | Maks |
 |---|---|---|
-| Suara | mp3, wav, ogg, m4a, aac | 20 MB |
+| Suara | mp3, wav, ogg, m4a, aac | 100 MB |
 | Video mufrodat | mp4, webm | 100 MB |
 | Gambar latar | png, jpg, gif, webp | 10 MB |
 
