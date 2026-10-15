@@ -7,7 +7,7 @@ import { getRevision } from '@/lib/db';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Papan Wonosalam',
+  title: 'Integrated-Clock',
   description: 'Papan informasi 24 jam di Wonosalam Boarding School.',
 };
 
